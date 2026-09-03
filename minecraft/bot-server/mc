@@ -1,0 +1,1048 @@
+#!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════════
+# mc — HermesCraft CLI
+#
+# Talks to the bot HTTP server (bot/server.js) running on localhost.
+# Human-readable output by default. --json for machine output.
+#
+# Usage:
+#   mc status                    # full game state
+#   mc inventory                 # categorized inventory
+#   mc nearby                    # blocks + entities nearby
+#   mc scene 16                  # fair-play scene summary from current viewpoint
+#   mc chat "hello world"        # send chat message
+#   mc read_chat                 # read recent messages
+#   mc collect oak_log 5         # mine 5 oak logs
+#   mc craft wooden_pickaxe      # craft an item
+#   mc recipes stone_pickaxe     # look up recipe
+#   mc goto 100 64 -200          # navigate to coordinates
+#   mc goto_near 100 64 -200     # navigate near coordinates
+#   mc attack zombie             # attack nearest mob of type
+#   mc eat                       # eat best food
+#   mc equip stone_sword         # equip item to hand
+#   mc place cobblestone 10 65 5 # place block at position
+#   mc dig 10 65 5               # dig block at position
+#   mc find_blocks iron_ore      # find block locations
+#   mc find_entities creeper     # find entities nearby
+#   mc follow Steve              # follow a player
+#   mc pickup                    # pick up nearby items
+#   mc smelt raw_iron            # smelt in furnace
+#   mc toss dirt                 # toss item
+#   mc fight zombie              # sustained combat
+#   mc bg_fight                  # fight in background
+#   mc flee 20                   # flee from hostiles
+#   mc chat_to Steve "hello"     # whisper to player
+#   mc sleep                     # sleep in bed
+#   mc stop                      # stop all actions
+#   mc wait 5                    # wait N seconds
+#   mc use                       # use held item
+#   mc connect                   # (re)connect bot
+#   mc health                    # quick health check
+#   mc chest 10 65 5             # list container contents
+#   mc deposit dirt 10 65 5      # deposit item in container
+#   mc withdraw iron_ingot 10 65 5 # withdraw from container
+#   mc mark home "my base"      # save current location
+#   mc marks                    # list saved locations
+#   mc go_mark home             # navigate to saved location
+#   mc deaths                   # death info
+#   mc deathpoint               # go to last death spot
+#
+# Environment:
+#   MC_API_URL   Bot server URL (default: http://localhost:3001)
+# ═══════════════════════════════════════════════════════════════
+
+set -o pipefail
+
+API="${MC_API_URL:-http://localhost:3001}"
+JSON_MODE=false
+
+# Check for --json flag
+ARGS=()
+for arg in "$@"; do
+    if [ "$arg" = "--json" ]; then
+        JSON_MODE=true
+    else
+        ARGS+=("$arg")
+    fi
+done
+set -- "${ARGS[@]+"${ARGS[@]}"}"
+
+CMD="${1:-help}"
+shift 2>/dev/null || true
+
+# ── Helpers ──────────────────────────────────────────────
+
+die() { echo "ERROR: $1" >&2; exit 1; }
+
+api_get() {
+    local path="$1"
+    local resp
+    resp=$(curl -sf --max-time 15 "${API}${path}" 2>/dev/null) || die "Bot server not responding at $API. Is it running? (cd bot && npm start)"
+    echo "$resp"
+}
+
+api_post() {
+    local path="$1"
+    local data
+    if [ $# -ge 2 ]; then data="$2"; else data='{}'; fi
+    local resp http_code
+    resp=$(curl -s --max-time 300 -w '\n%{http_code}' -X POST -H 'Content-Type: application/json' -d "$data" "${API}${path}" 2>/dev/null) || die "Bot server not responding at $API. Is it running? (cd bot && npm start)"
+    http_code=$(echo "$resp" | tail -1)
+    resp=$(echo "$resp" | sed '$d')
+    if [ -z "$resp" ] || [ "$http_code" = "000" ]; then
+        die "Bot server not responding at $API. Is it running? (cd bot && npm start)"
+    fi
+    echo "$resp"
+}
+
+# Parse JSON fields — works with basic jq or python fallback
+jq_or_py() {
+    if command -v jq &>/dev/null; then
+        jq -r "$1" 2>/dev/null
+    else
+        python3 -c "import sys,json; data=json.load(sys.stdin); print($2)" 2>/dev/null
+    fi
+}
+
+# Pretty-print JSON for human output
+pretty() {
+    local resp="$1"
+
+    if [ "$JSON_MODE" = true ]; then
+        echo "$resp"
+        return
+    fi
+
+    # Check for errors
+    local ok
+    ok=$(echo "$resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('ok',True))" 2>/dev/null)
+    if [ "$ok" = "False" ]; then
+        local err
+        err=$(echo "$resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error','Unknown error'))" 2>/dev/null)
+        die "$err"
+    fi
+
+    # Pretty print with python
+    echo "$resp" | python3 -c "
+import sys, json
+
+data = json.load(sys.stdin)
+
+# If there's a 'result' field, print it prominently
+if 'result' in data:
+    print(f\"  ✓ {data['result']}\")
+
+# Print brief state if present
+state = data.get('state')
+if state:
+    parts = []
+    if 'health' in state: parts.append(f\"HP:{state['health']}\")
+    if 'food' in state: parts.append(f\"Food:{state['food']}\")
+    if 'position' in state:
+        p = state['position']
+        parts.append(f\"Pos:{p['x']},{p['y']},{p['z']}\")
+    if 'holding' in state: parts.append(f\"Hold:{state['holding']}\")
+    if 'isDay' in state: parts.append('☀ Day' if state['isDay'] else '☾ Night')
+    if parts:
+        print(f\"  [{' | '.join(parts)}]\")
+    # Show new chat that arrived during action
+    if 'new_chat' in state:
+        for msg in state['new_chat']:
+            print(f\"  💬 <{msg['from']}> {msg['message']} ({msg['ago']} ago)\")
+    if 'pending_commands' in state:
+        print(f\"  ⚡ {state['pending_commands']} pending command(s) — run mc commands\")
+    if 'overheard_nearby' in state:
+        print(f\"  👂 {state['overheard_nearby']} overheard message(s) — run mc overhear\")
+    if 'task' in state:
+        t = state['task']
+        print(f\"  🔄 Task running: {t['action']} ({t['elapsed']})\")
+    if 'task_done' in state:
+        print(f\"  ✅ Task finished: {state['task_done']}\")
+    if 'task_error' in state:
+        print(f\"  ❌ Task failed: {state['task_error']}\")
+
+# Print data if present (for status/inventory/nearby)
+d = data.get('data')
+if d and isinstance(d, dict):
+    # Full status
+    if 'health' in d and 'position' in d and 'inventory' in d:
+        p = d['position']
+        print(f\"  ♥ Health: {d['health']}/20  Food: {d['food']}/20  Sat: {d.get('saturation', '?')}\")
+        print(f\"  ⊕ Position: {p['x']}, {p['y']}, {p['z']}  ({d.get('dimension','?')}, {d.get('biome','?')})\")
+        tp = d.get('timePhase','?')
+        rain = ' 🌧' if d.get('isRaining') else ''
+        print(f\"  ☀ Time: {d.get('time','?')} ({tp}){rain}\")
+        hold = d.get('holding', 'empty')
+        if isinstance(hold, dict): hold = f\"{hold['name']} x{hold['count']}\"
+        print(f\"  ✋ Holding: {hold}\")
+        print(f\"  📦 Inventory ({d.get('inventoryCount',0)} items):\")
+        for item in d.get('inventory', []):
+            print(f\"     {item['name']} x{item['count']}\")
+        ents = d.get('nearbyEntities', [])
+        if ents:
+            print(f\"  👁 Nearby entities:\")
+            for e in ents[:10]:
+                hp = f\" HP:{e['health']}\" if e.get('health') else ''
+                print(f\"     {e['type']} ({e['distance']}m){hp}\")
+        notable = d.get('notableBlocks', [])
+        if notable:
+            print(f\"  🔍 Notable blocks:\")
+            for b in notable[:10]:
+                bp = b['position']
+                print(f\"     {b['name']} at {bp['x']},{bp['y']},{bp['z']}\")
+        chat = d.get('unreadChat', [])
+        if chat:
+            print(f\"  💬 Chat:\")
+            for m in chat:
+                print(f\"     <{m['from']}> {m['message']} ({m['ago']} ago)\")
+        if d.get('deaths', 0) > 0:
+            print(f\"  💀 Deaths: {d['deaths']}\")
+
+    # Inventory
+    elif 'categories' in d:
+        cats = d['categories']
+        total = d.get('totalSlots', 0)
+        print(f\"  📦 Inventory ({total} slots used):\")
+        for cat, items in cats.items():
+            print(f\"  [{cat.upper()}]\")
+            for item in items:
+                print(f\"    {item['name']} x{item['count']}\")
+
+    # Nearby
+    elif 'entities' in d and 'blocks' in d:
+        ents = d['entities']
+        blocks = d['blocks']
+        print(f\"  👁 Entities ({len(ents)}):\")
+        for e in ents[:15]:
+            hp = f\" HP:{e.get('health','')}\" if e.get('health') else ''
+            kind = f\" [{e.get('kind','')}]\" if e.get('kind') else ''
+            print(f\"    {e['type']} ({e['distance']}m){hp}{kind}\")
+        print(f\"  🧱 Blocks ({len(blocks)} types):\")
+        for b in blocks[:20]:
+            n = b.get('nearest', {})
+            loc = f\" nearest:{n.get('x','')},{n.get('y','')},{n.get('z','')}\" if n else ''
+            print(f\"    {b['name']} x{b['count']}{loc}\")
+
+    # Chat messages
+    elif 'messages' in d:
+        msgs = d['messages']
+        if not msgs:
+            print('  No messages.')
+        else:
+            for m in msgs:
+                w = ' [whisper]' if m.get('whisper') else ''
+                print(f\"  <{m['from']}> {m['message']}{w}\")
+
+    # Recipes
+    elif 'recipes' in d:
+        print(f\"  {d.get('result', '')}\")
+        for r in d.get('recipes', []):
+            ings = ', '.join(f\"{k} x{v}\" for k, v in r.get('ingredients', {}).items())
+            table = ' (needs crafting table)' if r.get('needsTable') else ''
+            print(f\"    {ings} → x{r.get('makes', 1)}{table}\")
+
+    # Find blocks/entities
+    elif 'locations' in d:
+        print(f\"  {d.get('result', '')}\")
+        for loc in d.get('locations', []):
+            print(f\"    ({loc['x']}, {loc['y']}, {loc['z']}) — {loc['distance']}m\")
+
+    # Generic
+    else:
+        for k, v in d.items():
+            print(f\"  {k}: {v}\")
+
+# Print other interesting fields
+for key in ['locations', 'recipes']:
+    if key in data and key not in (data.get('data') or {}):
+        items = data[key]
+        if isinstance(items, list):
+            for item in items[:15]:
+                if isinstance(item, dict):
+                    parts = [f\"{k}:{v}\" for k,v in item.items()]
+                    print(f\"    {' '.join(parts)}\")
+                else:
+                    print(f\"    {item}\")
+" 2>/dev/null || echo "$resp"
+}
+
+# ── Commands ─────────────────────────────────────────────
+
+case "$CMD" in
+    # Observation
+    status|state|observe|s)
+        pretty "$(api_get '/status')"
+        ;;
+
+    inventory|inv|i)
+        pretty "$(api_get '/inventory')"
+        ;;
+
+    nearby|n)
+        RADIUS="${1:-32}"
+        pretty "$(api_get "/nearby?radius=$RADIUS")"
+        ;;
+
+    map|m)
+        RADIUS="${1:-16}"
+        RESULT=$(api_get "/map?radius=$RADIUS")
+        # Extract the map string and print it raw (not JSON-pretty)
+        python3 -c "
+import json, sys
+try:
+    d = json.loads(sys.argv[1])
+    data = d.get('data', d)
+    if 'map' in data:
+        print(data['map'])
+        print()
+        print(data.get('legend', ''))
+        print()
+        print(f\"Center: {data.get('center', '?')}  Scale: {data.get('scale', '?')}\")
+        if data.get('entities_on_map'):
+            print()
+            for e in data['entities_on_map']:
+                print(f'  {e}')
+    else:
+        print(json.dumps(data, indent=2))
+except: print(sys.argv[1])
+" "$RESULT"
+        ;;
+
+    look|survey)
+        RESULT=$(api_get "/look")
+        python3 -c "
+import json, sys
+try:
+    d = json.loads(sys.argv[1])
+    data = d.get('data', d)
+    print(data.get('description', json.dumps(data, indent=2)))
+except: print(sys.argv[1])
+" "$RESULT"
+        ;;
+
+    scene|perceive|vision)
+        RANGE="${1:-16}"
+        RESULT=$(api_get "/scene?range=$RANGE")
+        python3 -c "
+import json, sys
+try:
+    d = json.loads(sys.argv[1])
+    data = d.get('data', d)
+    print(data.get('summary', json.dumps(data, indent=2)))
+    if data.get('visible_blocks'):
+        print('\nVisible blocks:')
+        for b in data['visible_blocks'][:8]:
+            print(f\"  {b['name']} x{b['count']} nearest:{b['nearest_distance']}m sectors:{','.join(b['sectors'])}\")
+    if data.get('visible_entities'):
+        print('\nVisible entities:')
+        for e in data['visible_entities'][:8]:
+            print(f\"  {e['type']} {e['distance']}m {e['bearing']}\")
+    if data.get('hazards'):
+        print('\nHazards:')
+        for h in data['hazards']:
+            print(f\"  {h}\")
+    if data.get('memory_hints'):
+        print('\nRemembered nearby:')
+        for m in data['memory_hints']:
+            print(f\"  {m}\")
+except: print(sys.argv[1])
+" "$RESULT"
+        ;;
+
+    chat|say)
+        MSG="${1:?Usage: mc chat \"message\"}"
+        # Escape the message for JSON
+        ESCAPED_MSG=$(python3 -c "import json,sys; print(json.dumps(sys.argv[1]))" "$MSG")
+        pretty "$(api_post '/action/chat' "{\"message\":$ESCAPED_MSG}")"
+        ;;
+
+    read_chat|messages|msg)
+        COUNT="${1:-20}"
+        pretty "$(api_get "/chat?count=$COUNT")"
+        ;;
+
+    overhear|overheard|eavesdrop)
+        COUNT="${1:-20}"
+        pretty "$(api_get "/overhear?count=$COUNT")"
+        ;;
+
+    social)
+        pretty "$(api_get '/social')"
+        ;;
+
+    # Movement
+    goto|go|g)
+        X="${1:?Usage: mc goto X Y Z}"
+        Y="${2:?Usage: mc goto X Y Z}"
+        Z="${3:?Usage: mc goto X Y Z}"
+        pretty "$(api_post '/action/goto' "{\"x\":$X,\"y\":$Y,\"z\":$Z}")"
+        ;;
+
+    goto_near|near)
+        X="${1:?Usage: mc goto_near X Y Z [range]}"
+        Y="${2:?Usage: mc goto_near X Y Z}"
+        Z="${3:?Usage: mc goto_near X Y Z}"
+        RANGE="${4:-2}"
+        pretty "$(api_post '/action/goto_near' "{\"x\":$X,\"y\":$Y,\"z\":$Z,\"range\":$RANGE}")"
+        ;;
+
+    follow|f)
+        PLAYER="${1:?Usage: mc follow PLAYER}"
+        pretty "$(api_post '/action/follow' "{\"player\":\"$PLAYER\"}")"
+        ;;
+
+    look_at)
+        X="${1:?Usage: mc look_at X Y Z}"
+        Y="${2:?Usage: mc look_at X Y Z}"
+        Z="${3:?Usage: mc look_at X Y Z}"
+        pretty "$(api_post '/action/look' "{\"x\":$X,\"y\":$Y,\"z\":$Z}")"
+        ;;
+
+    stop)
+        pretty "$(api_post '/action/stop')"
+        ;;
+
+    # Mining
+    collect|mine|c)
+        BLOCK="${1:?Usage: mc collect BLOCK [count]}"
+        COUNT="${2:-1}"
+        pretty "$(api_post '/action/collect' "{\"block\":\"$BLOCK\",\"count\":$COUNT}")"
+        ;;
+
+    dig|d)
+        X="${1:?Usage: mc dig X Y Z}"
+        Y="${2:?Usage: mc dig X Y Z}"
+        Z="${3:?Usage: mc dig X Y Z}"
+        pretty "$(api_post '/action/dig' "{\"x\":$X,\"y\":$Y,\"z\":$Z}")"
+        ;;
+
+    pickup|p)
+        pretty "$(api_post '/action/pickup')"
+        ;;
+
+    find_blocks|find|fb)
+        BLOCK="${1:?Usage: mc find_blocks BLOCK [radius] [count]}"
+        RADIUS="${2:-32}"
+        COUNT="${3:-10}"
+        pretty "$(api_post '/action/find_blocks' "{\"block\":\"$BLOCK\",\"radius\":$RADIUS,\"count\":$COUNT}")"
+        ;;
+
+    find_entities|fe)
+        TYPE="${1:-}"
+        RADIUS="${2:-32}"
+        if [ -n "$TYPE" ]; then
+            pretty "$(api_post '/action/find_entities' "{\"type\":\"$TYPE\",\"radius\":$RADIUS}")"
+        else
+            pretty "$(api_post '/action/find_entities' "{\"radius\":$RADIUS}")"
+        fi
+        ;;
+
+    commands|cmds|queue)
+        pretty "$(api_get '/commands')"
+        ;;
+
+    complete_command|done)
+        IDX="${1:-0}"
+        pretty "$(api_post '/action/complete_command' "{\"index\":$IDX}")"
+        ;;
+
+    # Crafting
+    craft|cr)
+        ITEM="${1:?Usage: mc craft ITEM [count]}"
+        COUNT="${2:-1}"
+        pretty "$(api_post '/action/craft' "{\"item\":\"$ITEM\",\"count\":$COUNT}")"
+        ;;
+
+    recipes|recipe|r)
+        ITEM="${1:?Usage: mc recipes ITEM}"
+        pretty "$(api_post '/action/recipes' "{\"item\":\"$ITEM\"}")"
+        ;;
+
+    smelt|sm)
+        INPUT="${1:?Usage: mc smelt INPUT [fuel] [count]}"
+        FUEL="${2:-}"
+        COUNT="${3:-1}"
+        DATA="{\"input\":\"$INPUT\",\"count\":$COUNT"
+        [ -n "$FUEL" ] && DATA="$DATA,\"fuel\":\"$FUEL\""
+        DATA="$DATA}"
+        pretty "$(api_post '/action/smelt' "$DATA")"
+        ;;
+
+    # Combat / Survival
+    attack|kill|a)
+        TARGET="${1:-}"
+        if [ -n "$TARGET" ]; then
+            pretty "$(api_post '/action/attack' "{\"target\":\"$TARGET\"}")"
+        else
+            pretty "$(api_post '/action/attack' '{}')"
+        fi
+        ;;
+
+    fight)
+        pretty "$(api_post '/action/fight' "{\"target\":\"${1:-}\",\"retreat_health\":${2:-6},\"duration\":${3:-30}}")"
+        ;;
+
+    bg_fight)
+        pretty "$(api_post '/task/fight' "{\"target\":\"${1:-}\",\"retreat_health\":${2:-6},\"duration\":${3:-30}}")"
+        ;;
+
+    flee)
+        pretty "$(api_post '/action/flee' "{\"distance\":${1:-16}}")"
+        ;;
+
+    chat_to)
+        PLAYER="${1:?Usage: mc chat_to PLAYER \"message\"}"
+        MSG="${2:?Usage: mc chat_to PLAYER \"message\"}"
+        ESCAPED_MSG=$(python3 -c "import json,sys; print(json.dumps(sys.argv[1]))" "$MSG")
+        pretty "$(api_post '/action/chat_to' "{\"player\":\"$PLAYER\",\"message\":$ESCAPED_MSG}")"
+        ;;
+
+    whisper|msg|dm)
+        PLAYER="${1:?Usage: mc whisper PLAYER \"message\"}"
+        MSG="${2:?Usage: mc whisper PLAYER \"message\"}"
+        ESCAPED_MSG=$(python3 -c "import json,sys; print(json.dumps(sys.argv[1]))" "$MSG")
+        pretty "$(api_post '/action/whisper' "{\"player\":\"$PLAYER\",\"message\":$ESCAPED_MSG}")"
+        ;;
+
+    eat|e)
+        pretty "$(api_post '/action/eat')"
+        ;;
+
+    equip|eq)
+        ITEM="${1:?Usage: mc equip ITEM [slot]}"
+        SLOT="${2:-hand}"
+        pretty "$(api_post '/action/equip' "{\"item\":\"$ITEM\",\"slot\":\"$SLOT\"}")"
+        ;;
+
+    # Building
+    place|pl)
+        BLOCK="${1:?Usage: mc place BLOCK X Y Z}"
+        X="${2:?Usage: mc place BLOCK X Y Z}"
+        Y="${3:?Usage: mc place BLOCK X Y Z}"
+        Z="${4:?Usage: mc place BLOCK X Y Z}"
+        pretty "$(api_post '/action/place' "{\"block\":\"$BLOCK\",\"x\":$X,\"y\":$Y,\"z\":$Z}")"
+        ;;
+
+    fill)
+        BLOCK="${1:?Usage: mc fill BLOCK X1 Y1 Z1 X2 Y2 Z2 [hollow]}"
+        X1="${2:?Usage: mc fill BLOCK X1 Y1 Z1 X2 Y2 Z2 [hollow]}"
+        Y1="${3:?Usage: mc fill BLOCK X1 Y1 Z1 X2 Y2 Z2 [hollow]}"
+        Z1="${4:?Usage: mc fill BLOCK X1 Y1 Z1 X2 Y2 Z2 [hollow]}"
+        X2="${5:?Usage: mc fill BLOCK X1 Y1 Z1 X2 Y2 Z2 [hollow]}"
+        Y2="${6:?Usage: mc fill BLOCK X1 Y1 Z1 X2 Y2 Z2 [hollow]}"
+        Z2="${7:?Usage: mc fill BLOCK X1 Y1 Z1 X2 Y2 Z2 [hollow]}"
+        HOLLOW="${8:-false}"
+        ESCAPED_BLOCK=$(python3 -c "import json,sys; print(json.dumps(sys.argv[1]))" "$BLOCK")
+        pretty "$(api_post '/task/place_fill' "{\"block\":$ESCAPED_BLOCK,\"x1\":$X1,\"y1\":$Y1,\"z1\":$Z1,\"x2\":$X2,\"y2\":$Y2,\"z2\":$Z2,\"hollow\":$HOLLOW}")"
+        ;;
+
+    interact|use_block)
+        X="${1:?Usage: mc interact X Y Z}"
+        Y="${2:?Usage: mc interact X Y Z}"
+        Z="${3:?Usage: mc interact X Y Z}"
+        pretty "$(api_post '/action/interact' "{\"x\":$X,\"y\":$Y,\"z\":$Z}")"
+        ;;
+
+    close)
+        pretty "$(api_post '/action/close_screen')"
+        ;;
+
+    # Utility
+    use|u)
+        pretty "$(api_post '/action/use')"
+        ;;
+
+    toss|drop)
+        ITEM="${1:?Usage: mc toss ITEM [count]}"
+        COUNT="${2:-}"
+        if [ -n "$COUNT" ]; then
+            pretty "$(api_post '/action/toss' "{\"item\":\"$ITEM\",\"count\":$COUNT}")"
+        else
+            pretty "$(api_post '/action/toss' "{\"item\":\"$ITEM\"}")"
+        fi
+        ;;
+
+    sleep|bed)
+        pretty "$(api_post '/action/sleep_bed')"
+        ;;
+
+    wait|w)
+        SECS="${1:-5}"
+        pretty "$(api_post '/action/wait' "{\"seconds\":$SECS}")"
+        ;;
+
+    # Death recovery
+    deaths)     pretty "$(api_get "/deaths")" ;;
+    deathpoint) pretty "$(api_post '/action/deathpoint' '{}')" ;;
+
+    # Container interaction
+    chest)
+        X="${1:?Usage: mc chest X Y Z}"
+        Y="${2:?Usage: mc chest X Y Z}"
+        Z="${3:?Usage: mc chest X Y Z}"
+        pretty "$(api_post '/action/list_container' "{\"x\":$X,\"y\":$Y,\"z\":$Z}")"
+        ;;
+    deposit)
+        ITEM="${1:?Usage: mc deposit ITEM X Y Z [count]}"
+        X="${2:?Usage: mc deposit ITEM X Y Z}"
+        Y="${3:?Usage: mc deposit ITEM X Y Z}"
+        Z="${4:?Usage: mc deposit ITEM X Y Z}"
+        COUNT="${5:-0}"
+        pretty "$(api_post '/action/deposit' "{\"item\":\"$ITEM\",\"x\":$X,\"y\":$Y,\"z\":$Z,\"count\":$COUNT}")"
+        ;;
+    withdraw)
+        ITEM="${1:?Usage: mc withdraw ITEM X Y Z [count]}"
+        X="${2:?Usage: mc withdraw ITEM X Y Z}"
+        Y="${3:?Usage: mc withdraw ITEM X Y Z}"
+        Z="${4:?Usage: mc withdraw ITEM X Y Z}"
+        COUNT="${5:-0}"
+        pretty "$(api_post '/action/withdraw' "{\"item\":\"$ITEM\",\"x\":$X,\"y\":$Y,\"z\":$Z,\"count\":$COUNT}")"
+        ;;
+
+    # Coordinate memory
+    mark)
+        NAME="${1:?Usage: mc mark NAME [note]}"
+        NOTE="${2:-}"
+        pretty "$(api_post '/action/mark' "{\"name\":\"$NAME\",\"note\":\"$NOTE\"}")"
+        ;;
+    marks)    pretty "$(api_post '/action/marks' '{}')" ;;
+    go_mark)
+        NAME="${1:?Usage: mc go_mark NAME}"
+        pretty "$(api_post '/action/go_mark' "{\"name\":\"$NAME\"}")"
+        ;;
+    unmark)
+        NAME="${1:?Usage: mc unmark NAME}"
+        pretty "$(api_post '/action/unmark' "{\"name\":\"$NAME\"}")"
+        ;;
+
+    # Background tasks
+    bg_collect)
+        BLOCK="${1:?Usage: mc bg_collect BLOCK [count]}"
+        COUNT="${2:-1}"
+        pretty "$(api_post '/task/collect' "{\"block\":\"$BLOCK\",\"count\":$COUNT}")"
+        ;;
+
+    bg_goto)
+        X="${1:?Usage: mc bg_goto X Y Z [range]}"
+        Y="${2:?Usage: mc bg_goto X Y Z [range]}"
+        Z="${3:?Usage: mc bg_goto X Y Z [range]}"
+        RANGE="${4:-3}"
+        pretty "$(api_post '/task/bg_goto' "{\"x\":$X,\"y\":$Y,\"z\":$Z,\"range\":$RANGE}")"
+        ;;
+
+    # Farming & ranching
+    till|hoe)
+        COUNT="${1:-5}"
+        pretty "$(api_post '/action/till' "{\"count\":$COUNT}")"
+        ;;
+
+    sow|plant)
+        SEED="${1:-}"
+        COUNT="${2:-10}"
+        if [ -n "$SEED" ]; then
+            pretty "$(api_post '/action/sow' "{\"seed\":\"$SEED\",\"count\":$COUNT}")"
+        else
+            pretty "$(api_post '/action/sow' "{\"count\":$COUNT}")"
+        fi
+        ;;
+
+    harvest|reap)
+        RADIUS="${1:-8}"
+        CAP="${2:-16}"
+        pretty "$(api_post '/action/harvest' "{\"radius\":$RADIUS,\"cap\":$CAP}")"
+        ;;
+
+    inspect|what)
+        X="${1:?Usage: mc inspect X Y Z}"
+        Y="${2:?Usage: mc inspect X Y Z}"
+        Z="${3:?Usage: mc inspect X Y Z}"
+        pretty "$(api_post '/action/inspect' "{\"x\":$X,\"y\":$Y,\"z\":$Z}")"
+        ;;
+
+    breed|mate)
+        ANIMAL="${1:?Usage: mc breed cow|sheep|pig|chicken}"
+        pretty "$(api_post '/action/breed' "{\"animal\":\"$ANIMAL\"}")"
+        ;;
+
+    shear)
+        pretty "$(api_post '/action/shear')"
+        ;;
+
+    milk)
+        pretty "$(api_post '/action/milk')"
+        ;;
+
+    door|opendoor)
+        if [ "${1:-}" = "close" ]; then
+            pretty "$(api_post '/action/door' '{"close":true}')"
+        else
+            pretty "$(api_post '/action/door' '{}')"
+        fi
+        ;;
+
+    fish|cast)
+        TIMEOUT="${1:-120}"
+        pretty "$(api_post '/action/fish' "{\"timeout_s\":$TIMEOUT}")"
+        ;;
+
+    bg_fish)
+        TIMEOUT="${1:-180}"
+        pretty "$(api_post '/task/fish' "{\"timeout_s\":$TIMEOUT}")"
+        ;;
+
+    bg)
+        ACTION="${1:?Usage: mc bg ACTION [args as JSON]}"
+        shift
+        DATA="${1:-{}}"
+        pretty "$(api_post "/task/$ACTION" "$DATA")"
+        ;;
+
+    task)
+        pretty "$(api_get '/task')"
+        ;;
+
+    cancel)
+        pretty "$(api_post '/task/cancel')"
+        ;;
+
+    # ── Advanced Combat ────────────────────────────────────────
+    sneak)
+        ENABLE="${1:-true}"
+        if [ "$ENABLE" = "off" ] || [ "$ENABLE" = "false" ] || [ "$ENABLE" = "0" ]; then
+            pretty "$(api_post '/action/sneak' '{"enable":false}')"
+        else
+            pretty "$(api_post '/action/sneak' '{"enable":true}')"
+        fi
+        ;;
+
+    shield|block)
+        DUR="${1:-3}"
+        pretty "$(api_post '/action/shield_block' "{\"duration\":$DUR}")"
+        ;;
+
+    shoot|bow)
+        TARGET="${1:-}"
+        PREDICT="${2:-true}"
+        if [ -n "$TARGET" ]; then
+            pretty "$(api_post '/action/shoot' "{\"target\":\"$TARGET\",\"predict\":$PREDICT}")"
+        else
+            pretty "$(api_post '/action/shoot' "{\"predict\":$PREDICT}")"
+        fi
+        ;;
+
+    sprint_attack|sa)
+        TARGET="${1:-}"
+        if [ -n "$TARGET" ]; then
+            pretty "$(api_post '/action/sprint_attack' "{\"target\":\"$TARGET\"}")"
+        else
+            pretty "$(api_post '/action/sprint_attack' '{}')"
+        fi
+        ;;
+
+    crit|critical)
+        TARGET="${1:-}"
+        if [ -n "$TARGET" ]; then
+            pretty "$(api_post '/action/critical_hit' "{\"target\":\"$TARGET\"}")"
+        else
+            pretty "$(api_post '/action/critical_hit' '{}')"
+        fi
+        ;;
+
+    strafe)
+        TARGET="${1:-}"
+        DIR="${2:-random}"
+        DUR="${3:-5}"
+        DATA="{\"direction\":\"$DIR\",\"duration\":$DUR"
+        [ -n "$TARGET" ] && DATA="$DATA,\"target\":\"$TARGET\""
+        DATA="$DATA}"
+        pretty "$(api_post '/action/strafe' "$DATA")"
+        ;;
+
+    combo)
+        TARGET="${1:-}"
+        STYLE="${2:-aggressive}"
+        DATA="{\"style\":\"$STYLE\""
+        [ -n "$TARGET" ] && DATA="$DATA,\"target\":\"$TARGET\""
+        DATA="$DATA}"
+        pretty "$(api_post '/action/combo' "$DATA")"
+        ;;
+
+    bg_combo)
+        TARGET="${1:-}"
+        STYLE="${2:-aggressive}"
+        DATA="{\"style\":\"$STYLE\""
+        [ -n "$TARGET" ] && DATA="$DATA,\"target\":\"$TARGET\""
+        DATA="$DATA}"
+        pretty "$(api_post '/task/combo' "$DATA")"
+        ;;
+
+    bg_strafe)
+        TARGET="${1:-}"
+        DIR="${2:-random}"
+        DUR="${3:-10}"
+        DATA="{\"direction\":\"$DIR\",\"duration\":$DUR"
+        [ -n "$TARGET" ] && DATA="$DATA,\"target\":\"$TARGET\""
+        DATA="$DATA}"
+        pretty "$(api_post '/task/strafe' "$DATA")"
+        ;;
+
+    # ── Fire-and-Forget Smelting ──────────────────────────────
+    smelt_start|sstart)
+        INPUT="${1:?Usage: mc smelt_start INPUT [fuel] [count]}"
+        FUEL="${2:-}"
+        COUNT="${3:-1}"
+        DATA="{\"input\":\"$INPUT\",\"count\":$COUNT"
+        [ -n "$FUEL" ] && DATA="$DATA,\"fuel\":\"$FUEL\""
+        DATA="$DATA}"
+        pretty "$(api_post '/action/smelt_start' "$DATA")"
+        ;;
+
+    furnace_check|fc)
+        X="${1:?Usage: mc furnace_check X Y Z}"
+        Y="${2:?Usage: mc furnace_check X Y Z}"
+        Z="${3:?Usage: mc furnace_check X Y Z}"
+        pretty "$(api_post '/action/furnace_check' "{\"x\":$X,\"y\":$Y,\"z\":$Z}")"
+        ;;
+
+    furnace_take|ft)
+        X="${1:?Usage: mc furnace_take X Y Z}"
+        Y="${2:?Usage: mc furnace_take X Y Z}"
+        Z="${3:?Usage: mc furnace_take X Y Z}"
+        pretty "$(api_post '/action/furnace_take' "{\"x\":$X,\"y\":$Y,\"z\":$Z}")"
+        ;;
+
+    furnaces)
+        pretty "$(api_get '/furnaces')"
+        ;;
+
+    # ── Team System ───────────────────────────────────────────
+    team_chat|tc)
+        MSG="${1:?Usage: mc team_chat \"message\"}"
+        ESCAPED_MSG=$(python3 -c "import json,sys; print(json.dumps(sys.argv[1]))" "$MSG")
+        pretty "$(api_post '/action/team_chat' "{\"message\":$ESCAPED_MSG}")"
+        ;;
+
+    team_status|ts)
+        pretty "$(api_post '/action/team_status' '{}')"
+        ;;
+
+    rally)
+        X="${1:?Usage: mc rally X Y Z [message]}"
+        Y="${2:?Usage: mc rally X Y Z}"
+        Z="${3:?Usage: mc rally X Y Z}"
+        MSG="${4:-}"
+        DATA="{\"x\":$X,\"y\":$Y,\"z\":$Z"
+        if [ -n "$MSG" ]; then
+            ESCAPED_MSG=$(python3 -c "import json,sys; print(json.dumps(sys.argv[1]))" "$MSG")
+            DATA="$DATA,\"message\":$ESCAPED_MSG"
+        fi
+        DATA="$DATA}"
+        pretty "$(api_post '/action/rally' "$DATA")"
+        ;;
+
+    report)
+        MSG="${1:?Usage: mc report \"message\"}"
+        ESCAPED_MSG=$(python3 -c "import json,sys; print(json.dumps(sys.argv[1]))" "$MSG")
+        pretty "$(api_post '/action/report' "{\"message\":$ESCAPED_MSG}")"
+        ;;
+
+    set_team)
+        TEAM="${1:?Usage: mc set_team TEAM ROLE [teammate1,teammate2,...]}"
+        ROLE="${2:-warrior}"
+        MATES="${3:-}"
+        DATA="{\"team\":\"$TEAM\",\"role\":\"$ROLE\""
+        if [ -n "$MATES" ]; then
+            # Convert comma-separated to JSON array
+            MATES_JSON=$(python3 -c "import json,sys; print(json.dumps(sys.argv[1].split(',')))" "$MATES")
+            DATA="$DATA,\"teammates\":$MATES_JSON"
+        fi
+        DATA="$DATA}"
+        pretty "$(api_post '/action/set_team' "$DATA")"
+        ;;
+
+    sounds)
+        pretty "$(api_get '/sounds')"
+        ;;
+
+    stats)
+        pretty "$(api_get '/stats')"
+        ;;
+
+    fair_play)
+        ENABLED="${1:-true}"
+        if [ "$ENABLED" = "off" ] || [ "$ENABLED" = "false" ] || [ "$ENABLED" = "0" ]; then
+            pretty "$(api_post '/action/set_fair_play' '{"enabled":false}')"
+        else
+            pretty "$(api_post '/action/set_fair_play' '{"enabled":true}')"
+        fi
+        ;;
+
+    # Vision
+    screenshot|ss)
+        OUTFILE="/tmp/mc_screenshot_$(date +%s).png"
+        # Try to find and screenshot the Minecraft window
+        WINID=$(xdotool search --name "Minecraft" 2>/dev/null | head -1)
+        if [ -z "$WINID" ]; then
+            echo "ERROR: Can't find Minecraft window"
+            exit 1
+        fi
+        # Activate window briefly, screenshot, return focus
+        PREV_WIN=$(xdotool getactivewindow 2>/dev/null || true)
+        xdotool windowactivate --sync "$WINID" 2>/dev/null
+        sleep 0.3
+        scrot -u "$OUTFILE" 2>/dev/null || scrot "$OUTFILE" 2>/dev/null
+        [ -n "$PREV_WIN" ] && xdotool windowactivate "$PREV_WIN" 2>/dev/null
+        if [ -f "$OUTFILE" ]; then
+            echo "$OUTFILE"
+        else
+            echo "ERROR: Screenshot failed"
+            exit 1
+        fi
+        ;;
+
+    screenshot_meta|ssmeta)
+        OUTFILE=$("$0" screenshot)
+        SCENE=$(api_get '/scene?range=16')
+        STATUS=$(api_get '/status')
+        python3 -c "
+import json, sys
+print(json.dumps({
+  'image_path': sys.argv[1],
+  'scene': json.loads(sys.argv[2]).get('data', {}),
+  'status': json.loads(sys.argv[3]).get('data', {}),
+}, indent=2))
+" "$OUTFILE" "$SCENE" "$STATUS"
+        ;;
+
+    # Connection
+    connect|reconnect)
+        pretty "$(api_post '/connect')"
+        ;;
+
+    health|h)
+        pretty "$(api_get '/health')"
+        ;;
+
+    # Help
+    help|--help|-h)
+        cat << 'EOF'
+HermesCraft CLI — control your Minecraft bot
+
+OBSERVATION:
+  mc status              Full game state (health, pos, inventory, nearby)
+  mc inventory           Categorized inventory
+  mc nearby [radius]     Blocks + entities nearby (default: 32)
+  mc map [radius]        ASCII top-down map of surroundings (default: 16)
+  mc look                Narrative description of what you see around you
+  mc scene [radius]      Fair-play scene summary from current viewpoint
+  mc read_chat [count]   Read recent chat messages
+  mc social              Social summary + recent interaction events
+  mc health              Quick connection + health check
+
+MOVEMENT:
+  mc goto X Y Z          Navigate to exact position
+  mc goto_near X Y Z [r] Navigate near position (range default: 2)
+  mc follow PLAYER       Follow a player
+  mc look_at X Y Z       Look at position
+  mc stop                Stop all movement/actions
+
+MINING:
+  mc collect BLOCK [n]   Find + mine N blocks (e.g. mc collect oak_log 5)
+  mc dig X Y Z           Dig specific block at coords
+  mc pickup              Pick up nearby item drops
+  mc find_blocks BLOCK   Find locations of a block type
+
+CRAFTING:
+  mc craft ITEM [n]      Craft an item (needs crafting table nearby for 3x3)
+  mc recipes ITEM        Look up crafting recipe
+  mc smelt INPUT [fuel]  Smelt in furnace (needs furnace nearby)
+
+COMBAT:
+  mc attack [target]     Attack nearest mob (or specific type)
+  mc fight [target] [hp] [dur]  Sustained fight (retreat at hp, dur seconds)
+  mc bg_fight [target]   Fight in background (non-blocking)
+  mc flee [distance]     Flee from nearest hostile (default: 16 blocks)
+  mc eat                 Eat best food in inventory
+  mc equip ITEM [slot]   Equip item (slot: hand, head, torso, legs, feet)
+
+ADVANCED COMBAT:
+  mc sneak [on|off]      Toggle sneak (hides nameplate, reduces detection)
+  mc shield [duration]   Block with shield for N seconds (default: 3)
+  mc shoot [target]      Shoot bow/crossbow at target (with prediction)
+  mc sprint_attack [tgt] Sprint + hit for extra knockback
+  mc crit [target]       Jump-attack for 150% damage (critical hit)
+  mc strafe [tgt] [dir] [dur]  Circle-strafe while attacking
+  mc combo [tgt] [style] Execute combo: aggressive/defensive/ranged/berserker
+  mc bg_combo [tgt] [s]  Combo in background
+  mc bg_strafe [tgt] [d] Strafe in background
+
+BUILDING:
+  mc place BLOCK X Y Z                     Place single block
+  mc fill BLOCK X1 Y1 Z1 X2 Y2 Z2 [hollow] Fill rectangular area (hollow=true for walls/shells)
+  mc interact X Y Z                        Right-click/activate block (chests, doors, etc)
+
+SOCIAL:
+  mc chat "message"        Say something publicly (nearby players hear it)
+  mc whisper PLAYER "msg"  Private /msg — only PLAYER sees it
+  mc overhear [count]      See overheard conversations between others
+  mc follow PLAYER         Follow a player
+
+CONTAINERS:
+  mc chest X Y Z             List container contents
+  mc deposit ITEM X Y Z [n]  Deposit item into container
+  mc withdraw ITEM X Y Z [n] Withdraw item from container
+
+LOCATIONS:
+  mc mark NAME [note]    Save current position with a name
+  mc marks               List all saved locations
+  mc go_mark NAME        Navigate to a saved location
+  mc unmark NAME         Delete a saved location
+
+DEATH RECOVERY:
+  mc deaths              Show death count + last death info
+  mc deathpoint          Navigate to last death location
+
+BACKGROUND TASKS (non-blocking):
+  mc bg_collect BLOCK [n]  Collect in background (returns immediately)
+  mc bg_goto X Y Z         Navigate in background
+  mc bg ACTION '{json}'    Any action in background
+  mc task                  Check background task status
+  mc cancel                Cancel current background task
+
+SMELTING (fire-and-forget):
+  mc smelt_start INPUT [fuel] [n]  Load furnace + leave immediately
+  mc furnace_check X Y Z          Check furnace status
+  mc furnace_take X Y Z            Collect finished output
+  mc furnaces                      List all tracked furnaces
+
+TEAM (10v10 arena):
+  mc set_team TEAM ROLE [mates]  Assign team (red/blue, warrior/ranger/etc)
+  mc team_chat "msg"             Send message to teammates only
+  mc team_status                 See all teammates' positions + health
+  mc rally X Y Z [msg]           Set team rally point
+  mc report "msg"                Send intel report to team
+  mc stats                       Kill/death/assist stats
+  mc sounds                      Recent sound events (fair play)
+  mc fair_play [on|off]          Toggle fair play mode (LOS, reaction delay)
+
+UTILITY:
+  mc use                 Use held item
+  mc toss ITEM           Drop item
+  mc sleep               Sleep in nearby bed
+  mc wait [seconds]      Wait (default: 5s)
+  mc connect             (Re)connect bot to server
+
+FLAGS:
+  --json                 Output raw JSON instead of human-readable
+
+ENVIRONMENT:
+  MC_API_URL             Bot server URL (default: http://localhost:3001)
+EOF
+        ;;
+
+    *)
+        echo "Unknown command: $CMD"
+        echo "Run 'mc help' for usage."
+        exit 1
+        ;;
+esac

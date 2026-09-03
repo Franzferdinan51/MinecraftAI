@@ -1300,6 +1300,24 @@ const ACTIONS = {
     }
   },
 
+  async bg_goto({ x, y, z, range = 3, timeout_s = 240 }) {
+    // Long-distance walk, designed to run via POST /task/bg_goto (background).
+    // Unlike goto/goto_near (15s cap), this keeps walking up to timeout_s.
+    const b = ensureBot();
+    const goal = new goals.GoalNear(Math.floor(x), Math.floor(y), Math.floor(z), range);
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), Math.min(timeout_s, 600) * 1000));
+    try {
+      await Promise.race([b.pathfinder.goto(goal), timeout]);
+      const pos = posObj();
+      return { result: `Arrived near ${fmt(x)}, ${fmt(y)}, ${fmt(z)} (now at ${pos.x},${pos.y},${pos.z})` };
+    } catch (e) {
+      try { b.pathfinder.setGoal(null); } catch {}
+      const pos = posObj();
+      if (e.message === 'timeout') return { result: `Still walking toward ${fmt(x)},${fmt(y)},${fmt(z)} after ${timeout_s}s, now at ${pos.x},${pos.y},${pos.z}. Run mc bg_goto again to continue, or mc stop.` };
+      return { result: `Navigation stopped: ${e.message}. Now at ${pos.x},${pos.y},${pos.z}.` };
+    }
+  },
+
   async follow({ player }) {
     const b = ensureBot();
     const entity = Object.values(b.entities).find(e =>
@@ -1403,10 +1421,236 @@ const ACTIONS = {
     return { result: msg };
   },
 
+  // ── Farming & ranching (patterns: official fisherman.js/farmer.js examples) ──
+  // NOTE: findBlock(s) with function matchers is unreliable on the 26.2 fork
+  // (null-position blocks), so soil/crop scans below walk the cube directly.
+  _scanNear(b, range, dyMin, dyMax, pred) {
+    const out = [];
+    const base = b.entity.position.floored();
+    for (let dx = -range; dx <= range; dx++) {
+      for (let dz = -range; dz <= range; dz++) {
+        for (let dy = dyMin; dy <= dyMax; dy++) {
+          let blk = null;
+          try { blk = b.blockAt(base.offset(dx, dy, dz)); } catch { blk = null; }
+          if (!blk) continue;
+          let above = null;
+          try { above = b.blockAt(base.offset(dx, dy + 1, dz)); } catch { above = null; }
+          try { if (pred(blk, above)) out.push(blk.position); } catch {}
+        }
+      }
+    }
+    return out.sort((p, q) => p.distanceTo(base) - q.distanceTo(base));
+  },
+
+  async till({ count = 5 }) {
+    const b = ensureBot();
+    const hoe = b.inventory.items().find(i => i.name.endsWith('_hoe'));
+    if (!hoe) throw new Error('No hoe in inventory. Craft one: 2 sticks + 2 planks/cobblestone/iron (mc craft stone_hoe). Then stand on dirt or grass.');
+    await b.equip(hoe, 'hand');
+    const n = Math.min(count, 12);
+    let tilled = 0, converted = 0;
+    for (let k = 0; k < n * 2 && tilled < n; k++) {
+      // Pass 1: a hoe turns coarse_dirt / rooted_dirt into plain dirt first.
+      let spots = tilled + converted < n
+        ? ACTIONS._scanNear(b, 5, -2, 0,
+            (blk, above) => (blk.name === 'coarse_dirt' || blk.name === 'rooted_dirt') && above && above.name === 'air')
+        : [];
+      let wantFarmland = spots.length === 0;
+      if (wantFarmland) {
+        spots = ACTIONS._scanNear(b, 5, -2, 0,
+          (blk, above) => (blk.name === 'dirt' || blk.name === 'grass_block') && above && above.name === 'air');
+      }
+      if (spots.length === 0) break;
+      const soil = spots[0];
+      try {
+        if (b.entity.position.distanceTo(soil) > 4) {
+          await b.pathfinder.goto(new goals.GoalNear(soil.x, soil.y, soil.z, 2));
+        }
+        const target = b.blockAt(soil);
+        if (!target) continue;
+        await b.activateBlock(target);
+        if (wantFarmland) tilled++; else converted++;
+        await sleep(300);
+      } catch (e) { log(`[till] ${e.message}`); }
+    }
+    if (tilled === 0 && converted === 0) throw new Error('No tillable dirt/grass/coarse_dirt with clear air above within 5 blocks. Clear the spot (mc dig) or move to open ground.');
+    const extra = converted > 0 ? ` (plus ${converted} coarse/rooted dirt loosened into dirt)` : '';
+    return { result: `Tilled ${tilled} farmland${extra}. Plant with mc sow, keep water within 4 blocks for hydration.` };
+  },
+
+  async sow({ seed, count = 10 }) {
+    const b = ensureBot();
+    const SOWABLE = ['wheat_seeds', 'beetroot_seeds', 'melon_seeds', 'pumpkin_seeds', 'carrot', 'potato', 'torchflower_seeds', 'pitcher_pod'];
+    let seedItem;
+    if (seed) {
+      seedItem = b.inventory.items().find(i => i.name === seed);
+      if (!seedItem) throw new Error(`No ${seed} in inventory. Break grass for wheat_seeds, or harvest carrots/potatoes.`);
+    } else {
+      seedItem = b.inventory.items().find(i => SOWABLE.includes(i.name));
+      if (!seedItem) throw new Error('No seeds/carrots/potatoes in inventory. Break short_grass or tall_grass for wheat_seeds (mc collect short_grass).');
+    }
+    const n = Math.min(count, 20);
+    let sown = 0;
+    for (let k = 0; k < n; k++) {
+      const spots = ACTIONS._scanNear(b, 6, -2, 0,
+        (blk, above) => blk.name === 'farmland' && above && above.name === 'air');
+      if (spots.length === 0) break;
+      const pos = spots[0];
+      try {
+        const cur = b.inventory.items().find(i => i.name === seedItem.name);
+        if (!cur) break;
+        await b.equip(cur, 'hand');
+        if (b.entity.position.distanceTo(pos) > 4) {
+          await b.pathfinder.goto(new goals.GoalNear(pos.x, pos.y, pos.z, 2));
+        }
+        const soil = b.blockAt(pos);
+        if (!soil || soil.name !== 'farmland') continue;
+        await b.placeBlock(soil, new Vec3(0, 1, 0));
+        sown++;
+        await sleep(300);
+      } catch (e) { log(`[sow] ${e.message}`); }
+    }
+    if (sown === 0) throw new Error('No empty farmland within 6 blocks. Till dirt first (mc till), then mc sow.');
+    return { result: `Planted ${sown} ${seedItem.name}. They grow over ~20 min in daylight (faster near water); harvest with mc harvest when tall/golden.` };
+  },
+
+  async harvest({ radius = 8, cap = 16 }) {
+    const b = ensureBot();
+    const MATURE_AGE = { wheat: 7, carrots: 7, potatoes: 7, beetroot: 3 };
+    const found = ACTIONS._scanNear(b, Math.min(radius, 8), -2, 1,
+      (blk) => { try { return MATURE_AGE[blk.name] !== undefined && blk.metadata === MATURE_AGE[blk.name]; } catch { return false; } });
+    if (found.length === 0) return { result: 'No ripe crops nearby (wheat golden/age 7, carrots/potatoes age 7, beetroot age 3). Unripe crops need daylight + time — check back later.' };
+    let cut = 0;
+    for (const pos of found.slice(0, Math.min(cap, 16))) {
+      try {
+        const target = b.blockAt(pos);
+        if (!target || MATURE_AGE[target.name] === undefined || target.metadata !== MATURE_AGE[target.name]) continue;
+        if (b.entity.position.distanceTo(pos) > 4.5) {
+          await b.pathfinder.goto(new goals.GoalNear(pos.x, pos.y, pos.z, 3));
+        }
+        await b.dig(target, true);
+        cut++;
+        await sleep(200);
+      } catch (e) { log(`[harvest] ${e.message}`); }
+    }
+    await sleep(600);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const drops = Object.values(b.entities)
+        .filter(e => (e.name === 'item' || e.displayName === 'Item') && e.position.distanceTo(b.entity.position) < 12)
+        .sort((a, c) => a.position.distanceTo(b.entity.position) - c.position.distanceTo(b.entity.position));
+      if (drops.length === 0) break;
+      for (const drop of drops.slice(0, 6)) {
+        try {
+          await b.pathfinder.goto(new goals.GoalNear(drop.position.x, drop.position.y, drop.position.z, 1));
+          await sleep(400);
+        } catch {}
+      }
+    }
+    const loot = b.inventory.items().filter(i => ['wheat', 'carrot', 'potato', 'beetroot', 'wheat_seeds'].includes(i.name)).map(i => `${i.name} x${i.count}`).join(', ');
+    return { result: `Harvested ${cut} ripe crops. Food/seeds held: ${loot || 'none yet — walk over drops'}. Replant with mc sow to keep the farm going.` };
+  },
+
+  async breed({ animal }) {
+    const b = ensureBot();
+    const BREED_FOOD = {
+      cow: ['wheat'], mooshroom: ['wheat'], sheep: ['wheat'],
+      pig: ['carrot', 'potato', 'beetroot'],
+      chicken: ['wheat_seeds', 'melon_seeds', 'pumpkin_seeds', 'beetroot_seeds'],
+    };
+    const foods = BREED_FOOD[(animal || '').toLowerCase()];
+    if (!foods) throw new Error(`breed what? Supported: cow, sheep, pig, chicken. Example: mc breed cow.`);
+    const food = b.inventory.items().find(i => foods.includes(i.name));
+    if (!food) throw new Error(`No ${foods.join(' or ')} in inventory to breed ${animal}. Farm it first or ask the team.`);
+    const herd = Object.values(b.entities)
+      .filter(e => e !== b.entity && (e.name || '').toLowerCase() === animal.toLowerCase() && e.position.distanceTo(b.entity.position) < 16)
+      .sort((a, c) => a.position.distanceTo(b.entity.position) - c.position.distanceTo(b.entity.position));
+    if (herd.length < 2) throw new Error(`Only found ${herd.length} ${animal} within 16 blocks — need 2 adults. Find/lure more, or explore for them.`);
+    await b.equip(food, 'hand');
+    for (const mate of herd.slice(0, 2)) {
+      if (b.entity.position.distanceTo(mate.position) > 3) {
+        await b.pathfinder.goto(new goals.GoalNear(mate.position.x, mate.position.y, mate.position.z, 2));
+      }
+      await b.activateEntity(mate);
+      await sleep(600);
+    }
+    return { result: `Fed 2 ${animal}s with ${food.name}. If both were adults, a baby appears + you gain XP. Babies grow in ~20 min; feed babies to grow them faster.` };
+  },
+
+  async shear() {
+    const b = ensureBot();
+    const shears = b.inventory.items().find(i => i.name === 'shears');
+    if (!shears) throw new Error('No shears in inventory. Craft: 2 iron_ingot diagonal (mc craft shears).');
+    const sheep = Object.values(b.entities)
+      .filter(e => e !== b.entity && (e.name || '').toLowerCase() === 'sheep' && e.position.distanceTo(b.entity.position) < 12)
+      .sort((a, c) => a.position.distanceTo(b.entity.position) - c.position.distanceTo(b.entity.position))[0];
+    if (!sheep) throw new Error('No sheep within 12 blocks. Explore or lure one with wheat (hold wheat: mc equip wheat).');
+    const before = b.inventory.items().filter(i => i.name === 'wool' || i.name.endsWith('_wool')).reduce((s, i) => s + i.count, 0);
+    await b.equip(shears, 'hand');
+    if (b.entity.position.distanceTo(sheep.position) > 3) {
+      await b.pathfinder.goto(new goals.GoalNear(sheep.position.x, sheep.position.y, sheep.position.z, 2));
+    }
+    await b.activateEntity(sheep);
+    await sleep(800);
+    // Step onto the drop to pick the wool up before counting
+    try {
+      await b.pathfinder.goto(new goals.GoalNear(sheep.position.x, sheep.position.y, sheep.position.z, 1));
+      await sleep(600);
+    } catch {}
+    const after = b.inventory.items().filter(i => i.name === 'wool' || i.name.endsWith('_wool')).reduce((s, i) => s + i.count, 0);
+    return { result: after > before ? `Sheared the sheep: +${after - before} wool. Wool regrows after it eats grass — shear again later.` : 'Sheep already sheared (no wool yet). Wait until it eats grass and fluffs back up, then mc shear again.' };
+  },
+
+  async milk() {
+    const b = ensureBot();
+    const bucket = b.inventory.items().find(i => i.name === 'bucket');
+    if (!bucket) throw new Error('No empty bucket in inventory. Craft: 3 iron_ingot in a V (mc craft bucket).');
+    const cow = Object.values(b.entities)
+      .filter(e => e !== b.entity && ((e.name || '').toLowerCase() === 'cow' || (e.name || '').toLowerCase() === 'mooshroom') && e.position.distanceTo(b.entity.position) < 12)
+      .sort((a, c) => a.position.distanceTo(b.entity.position) - c.position.distanceTo(b.entity.position))[0];
+    if (!cow) throw new Error('No cow within 12 blocks. Explore or lure one with wheat.');
+    await b.equip(bucket, 'hand');
+    if (b.entity.position.distanceTo(cow.position) > 3) {
+      await b.pathfinder.goto(new goals.GoalNear(cow.position.x, cow.position.y, cow.position.z, 2));
+    }
+    await b.activateEntity(cow);
+    await sleep(500);
+    const has = b.inventory.items().some(i => i.name === 'milk_bucket');
+    return { result: has ? 'Milked the cow: +1 milk_bucket. Drinking milk clears poison — keep one handy when mining.' : 'Milking failed (maybe a baby). Try another adult cow.' };
+  },
+
+  async fish({ timeout_s = 120 }) {
+    // Long cast — best run via POST /task/fish (background). Needs open water + sky.
+    const b = ensureBot();
+    const rod = b.inventory.items().find(i => i.name === 'fishing_rod');
+    if (!rod) throw new Error('No fishing_rod in inventory. Craft: 3 sticks + 2 string (spiders drop string at night).');
+    const water = b.findBlock({ matching: blk => blk.name === 'water', maxDistance: 10 });
+    if (!water) throw new Error('No water within 10 blocks. Walk to the shore first (mc goto_near water coords), then mc fish.');
+    if (b.entity.position.distanceTo(water.position) > 4) {
+      await b.pathfinder.goto(new goals.GoalNear(water.position.x, water.position.y, water.position.z, 2));
+    }
+    await b.equip(rod, 'hand');
+    const FISH = ['raw_cod', 'raw_salmon', 'tropical_fish', 'pufferfish'];
+    const countFish = () => b.inventory.items().filter(i => FISH.includes(i.name)).reduce((s, i) => s + i.count, 0);
+    const before = countFish();
+    const timeout = sleep(Math.min(timeout_s, 300) * 1000).then(() => { throw new Error('timeout'); });
+    try {
+      await Promise.race([b.fish(), timeout]);
+    } catch (e) {
+      try { b.activateItem(); } catch {} // reel in / cancel cast
+      const got = countFish() - before;
+      if (e.message === 'timeout') return { result: `Fished ${timeout_s}s with no bite yet (caught ${got}). Night rain bites faster; open water + sky above the bobber helps. Cast again: mc fish.` };
+      throw new Error(`Fishing failed: ${e.message}. Stand at open water with sky above, not under trees.`);
+    }
+    const got = countFish() - before;
+    return { result: got > 0 ? `Caught ${got} fish! Holding ${countFish()} total fish. Cook them in a furnace (mc smelt raw_cod).` : 'The bobber dipped but nothing was caught — cast again: mc fish.' };
+  },
+
   async dig({ x, y, z }) {
     const b = ensureBot();
     const target = b.blockAt(new Vec3(x, y, z));
     if (!target || target.name === 'air') throw new Error(`No block at ${x}, ${y}, ${z}`);
+    if (target.name.endsWith('_door')) throw new Error(`That's a door — open it with mc door instead of breaking it.`);
+    if (target.name.endsWith('_bed')) throw new Error(`That's a bed — never break beds. Sleep in them with mc sleep.`);
     await b.tool.equipForBlock(target);
     if (b.entity.position.distanceTo(target.position) > 4.5) {
       await b.pathfinder.goto(new goals.GoalNear(x, y, z, 3));
@@ -1473,6 +1717,36 @@ const ACTIONS = {
     }));
 
     return { result: fairPlayMode ? `Found ${found.length} visible ${block}` : `Found ${found.length} ${block}`, locations };
+  },
+
+  // ── Doors: open/close the nearest door instead of digging through walls ──
+  async door({ close = false } = {}) {
+    const b = ensureBot();
+    const spots = ACTIONS._scanNear(b, 4, -1, 1,
+      (blk) => { try { return blk.name.endsWith('_door'); } catch { return false; } });
+    if (spots.length === 0) throw new Error('No door within 4 blocks. Walk to a door first (mc goto_near its coords), then mc door.');
+    const pos = spots[0];
+    const target = b.blockAt(pos);
+    if (!target) throw new Error('Lost sight of the door. Try again.');
+    if (target.name === 'iron_door') throw new Error('Iron doors need a button/lever/pressure plate — hand-opening is impossible. Use the switch, or ask for a wooden door.');
+    let props = {};
+    try { props = target.getProperties(); } catch {}
+    const isOpen = props.open === 'true' || props.open === true;
+    if (close && !isOpen) return { result: 'Door is already closed.' };
+    if (!close && isOpen) return { result: 'Door is already open — walk through (mc goto_near past it).' };
+    await b.activateBlock(target);
+    await sleep(400);
+    return { result: close ? 'Closed the door behind you. Good manners.' : 'Opened the door — walk through now (mc goto_near past it), then mc door close=true.' };
+  },
+
+  // ── Inspect a block (name, growth age, properties) ──
+  async inspect({ x, y, z }) {
+    const b = ensureBot();
+    const target = b.blockAt(new Vec3(Math.floor(x), Math.floor(y), Math.floor(z)));
+    if (!target) return { result: `Can't see any block at ${x}, ${y}, ${z} (out of range or unloaded). Walk closer.` };
+    let props = '';
+    try { props = JSON.stringify(target.getProperties()); } catch { props = `metadata=${target.metadata}`; }
+    return { result: `${target.name} at ${x}, ${y}, ${z} ${props}`, block: target.name, metadata: target.metadata };
   },
 
   // ── Find entities ────────────────────────────────

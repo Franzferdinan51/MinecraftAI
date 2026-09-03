@@ -326,12 +326,18 @@ assert.equal(
 
 // Game knowledge: both prompts must teach mechanics + error recovery + beds.
 const promptSource = fs.readFileSync(sourcePath, 'utf8');
-for (const needle of ['MINECRAFT BASICS', 'ERROR RECOVERY', '46..54', 'crafting_table', 'furnace']) {
+for (const needle of ['MINECRAFT BASICS', 'ERROR RECOVERY', '46..54', 'crafting_table', 'furnace', 'FOOD CHAINS', 'mc till', 'mc harvest', 'mc breed', 'mc fish', 'mc door', 'mc inspect', 'DOORS ARE THE ONLY WAY THROUGH WALLS']) {
   assert.ok(promptSource.includes(needle), `controller prompt must teach ${needle}`);
 }
 const bridgeSource = fs.readFileSync(new URL('../lmstudio-bridge/bridge.mjs', import.meta.url), 'utf8');
-for (const needle of ['Mechanics you must know', 'Errors tell you the fix', '46..54']) {
+for (const needle of ['Mechanics you must know', 'Errors tell you the fix', '46..54', 'mc door', 'mc harvest', 'ENTER THROUGH DOORS ONLY']) {
   assert.ok(bridgeSource.includes(needle), `bridge prompt must teach ${needle}`);
+}
+
+// Bot server: farm/ranch/door/inspect actions must exist with helpful errors.
+const botSource = fs.readFileSync(new URL('../minecraft/bot-server/server.js', import.meta.url), 'utf8');
+for (const needle of ['async till(', 'async sow(', 'async harvest(', 'async breed(', 'async shear(', 'async milk(', 'async fish(', 'async door(', 'async inspect(', 'async bg_goto(', '_scanNear', "That's a door", 'never break beds']) {
+  assert.ok(botSource.includes(needle), `bot server must implement ${needle}`);
 }
 
 console.log('minion-controller regression tests: PASS');
