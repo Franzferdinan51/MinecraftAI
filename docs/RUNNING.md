@@ -70,11 +70,53 @@ install it once so it generates `~/.minecraft/`, then point it at
 `localhost:25565` and join. The bot is `HermesBot`; you'll see it move
 around as the model issues commands.
 
+## 7. Bedrock players (phone, console, etc.)
+
+The Java server does not speak Bedrock. To let a phone on the same
+network join with the official Bedrock client, run a protocol
+translator in front of the Java server.
+
+```bash
+# 1. Get the Geyser + Floodgate jars. The easiest path is to run them
+#    in a small Docker container, or download Spigot and drop the
+#    plugins in. Both projects publish build artifacts on their sites.
+#
+# 2. Configure Geyser to forward Bedrock (19132) to the Java server
+#    (25565) on this host. Default config:
+#
+#    bedrock:
+#      address: 0.0.0.0
+#      port: 19132
+#      motd1: "HermesCraft Bedrock"
+#    remote:
+#      address: 127.0.0.1
+#      port: 25565
+#      auth-type: offline
+#      enable-proxy-protocol: false
+#
+# 3. Install Floodgate so the Bedrock client and the Java bot can
+#    share a world without name collisions. Default behavior is fine.
+#
+# 4. From the Bedrock client on the phone: add a server with address
+#    <this-machine>:19132, port 19132, leave the rest default.
+#
+# 5. The Bedrock player shows up as <name> in the Java world and as
+#    a Bedrock-prefixed UUID on the Java side. HermesBot will see them
+#    in chat and can address them by name.
+```
+
+The Minion Controller and the bridge talk to the **Java** server, not
+to Geyser. So the bot still uses `127.0.0.1:25565`. Bedrock players
+see and hear the bot as if the bot were a real player; the bot does
+not know that some of its world is a translation.
+
 ## Service order matters
 
-1. Minecraft server first (the bot will reconnect, but the world must exist)
-2. Bot server (`hermescraft/bot/server.js`)
-3. Bridge and/or controller (the brain)
+1. Minecraft server first (the bot will reconnect, but the world
+   must exist)
+2. If using Bedrock, Geyser + Floodgate next
+3. Bot server (`hermescraft/bot/server.js`)
+4. Bridge and/or controller (the brain)
 
-The reverse order works too; the bridge will just retry `mc status` until
-the bot is up.
+The reverse order works too; the bridge will just retry `mc status`
+until the bot is up.
