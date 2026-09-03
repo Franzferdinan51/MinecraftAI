@@ -71,7 +71,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── state: one snapshot for the whole village ──
   if (req.method === 'GET' && url.pathname === '/api/state') {
-    const ctrl = await botFetch(3003, '/health');
+    const [ctrl, bridge] = await Promise.all([botFetch(3003, '/health'), botFetch(3002, '/health')]);
     const ctrlByName = Object.fromEntries((ctrl.minions || []).map((m) => [m.name, m]));
     const bots = await Promise.all(BOTS.map(async (b) => {
       const [st, task, deaths, queue] = await Promise.all([
@@ -90,8 +90,8 @@ const server = http.createServer(async (req, res) => {
         : 'bridge-driven — see team radio';
       return {
         name: b.name, role: c.role || b.role, color: b.color, port: b.port,
-        online: st.ok === true,
-        paused: !!c.paused, interval_ms: c.interval_ms || null, ticks: c.ticks ?? null,
+        model: b.name === 'HermesBot' ? (bridge.model || null) : (c.model || null),
+        online: st.ok === true, paused: !!c.paused, interval_ms: c.interval_ms || null, ticks: c.ticks ?? null,
         last_action: ((c.last_action || '') || fallbackAction).slice(0, 160),
         health: d.health ?? null, food: d.food ?? null,
         pos: d.position ? [Math.floor(d.position.x), Math.floor(d.position.y), Math.floor(d.position.z)] : null,
@@ -125,6 +125,24 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, messages: msgs });
   }
 
+  // ── LM Studio model catalog + live per-bot model switching ──
+  if (req.method === 'GET' && url.pathname === '/api/models') {
+    try {
+      const r = await fetch('http://127.0.0.1:1234/v1/models', { signal: AbortSignal.timeout(8000) });
+      const data = await r.json();
+      return json(res, r.ok ? 200 : 502, { ok: r.ok, models: (data.data || []).map((m) => ({ id: m.id, owned_by: m.owned_by || null, created: m.created || null, context_length: m.context_length || m.max_context_length || null, capabilities: m.capabilities || null })) });
+    } catch (e) { return json(res, 502, { ok: false, models: [], error: 'LM Studio unavailable: ' + String(e.message || e).slice(0, 100) }); }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/model') {
+    try {
+      const body = await readBody(req);
+      const bot = botByName(body.name);
+      if (!bot || !String(body.model || '').trim()) return json(res, 400, { ok: false, error: 'unknown bot or missing model' });
+      const target = bot.name === 'HermesBot' ? 3002 : 3003;
+      const r = await botFetch(target, '/model', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: bot.name, model: String(body.model).trim() }) });
+      return json(res, r.ok ? 200 : 400, r);
+    } catch { return json(res, 400, { ok: false, error: 'bad json' }); }
+  }
   // ── goal / pause / pace: forwarded to the controller ──
   if (url.pathname === '/api/goal') {
     if (req.method === 'GET') return json(res, 200, await botFetch(3003, '/goal'));

@@ -844,6 +844,21 @@ const server = http.createServer((req, res) => {
     }).catch((e) => send(400, { ok: false, error: e.message }));
     return;
   }
+  // Change one controller bot's model live. Validate against LM Studio first.
+  if (req.method === 'POST' && req.url === '/model') {
+    readJsonBody().then(async (body) => {
+      const m = minions.find((x) => x.name === body.name);
+      const model = String(body.model || '').trim();
+      if (!m || !model) return send(400, { ok: false, error: 'unknown bot or missing model' });
+      const mr = await fetch(`${LMS_URL}/models`, { headers: LMS_HEADERS, signal: AbortSignal.timeout(5000) });
+      const models = (await mr.json()).data || [];
+      if (!models.some((x) => x.id === model)) return send(400, { ok: false, error: 'model is not currently exposed by LM Studio' });
+      m.model = model;
+      rememberTeamChat('PLAN', `${m.name} model changed to ${model} from Mission Control.`);
+      send(200, { ok: true, name: m.name, model });
+    }).catch((e) => send(400, { ok: false, error: e.message }));
+    return;
+  }
   // Team radio: recent controller feed (plans, claims, acks) for Mission Control.
   if (req.method === 'GET' && req.url === '/team') {
     return send(200, { ok: true, messages: teamChat.slice(-30) });

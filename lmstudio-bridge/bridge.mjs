@@ -39,7 +39,8 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 
 const LMS_URL = (process.env.LMS_URL || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
-const LMS_MODEL = process.env.LMS_MODEL || 'ornith-1.5-9b';
+const DEFAULT_MODEL = process.env.LMS_MODEL || 'ornith-1.5-9b';
+let activeModel = DEFAULT_MODEL;
 const LMS_API_KEY = process.env.LMS_API_KEY || '';
 const LMS_HEADERS = { 'content-type': 'application/json', ...(LMS_API_KEY ? { authorization: `Bearer ${LMS_API_KEY}` } : {}) };
 const MC_CLI = process.env.MC_CLI || `${process.env.HOME}/.local/bin/mc`;
@@ -182,7 +183,7 @@ async function runTurn() {
     lastObservation = observation;
 
     const body = {
-      model: LMS_MODEL,
+      model: activeModel,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: observation },
@@ -236,12 +237,32 @@ async function runTurn() {
 }
 
 const server = http.createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/model') {
+    let raw = '';
+    req.on('data', (c) => { raw += c; if (raw.length > 2000) req.destroy(); });
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(raw || '{}');
+        const requested = String(body.model || '').trim();
+        const modelsRes = await fetch(`${LMS_URL}/models`, { headers: LMS_HEADERS, signal: AbortSignal.timeout(5000) });
+        const models = (await modelsRes.json()).data || [];
+        if (!requested || !models.some((m) => m.id === requested)) throw new Error('model is not currently exposed by LM Studio');
+        activeModel = requested;
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, model: activeModel }));
+      } catch (e) {
+        res.writeHead(400, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: String(e.message || e).slice(0, 180) }));
+      }
+    });
+    return;
+  }
   if (req.url === '/' || req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({
       ok: true,
       mode: BRIDGE_MODE,
-      model: LMS_MODEL,
+      model: activeModel,
       last_observation: lastObservation.slice(-800),
       last_action: lastAction,
       pending,
@@ -254,7 +275,7 @@ const server = http.createServer((req, res) => {
 server.listen(BRIDGE_PORT, '127.0.0.1', () => {
   console.log(`LM Studio Minecraft Bridge`);
   console.log(`   mode     : ${BRIDGE_MODE}`);
-  console.log(`   model    : ${LMS_MODEL}`);
+  console.log(`   model    : ${activeModel}`);
   console.log(`   lms url  : ${LMS_URL}`);
   console.log(`   mc cli   : ${MC_CLI}`);
   console.log(`   http     : http://127.0.0.1:${BRIDGE_PORT}/`);

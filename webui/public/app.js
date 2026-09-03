@@ -331,10 +331,10 @@ let serverSnap = null;
 async function loadDashExtras() {
   if (view !== 'dash') return;
   try {
-    const [s, inv] = await Promise.all([api('/api/server'), api('/api/inventories')]);
+    const [s, inv, models] = await Promise.all([api('/api/server'), api('/api/inventories'), api('/api/models')]);
     if (view !== 'dash') return;
     serverSnap = s.ok ? s : { error: s.error };
-    renderDashServer(); renderDashInv(inv.ok ? inv.inventories : null); renderDashBrain(); renderDashGive(); renderDashSettings(); renderDashActivity();
+    renderDashServer(); renderDashInv(inv.ok ? inv.inventories : null); renderDashBrain(); renderDashModels(models); renderDashGive(); renderDashSettings(); renderDashActivity();
   } catch { /* retry next tick */ }
 }
 function renderDashServer() {
@@ -438,6 +438,24 @@ document.addEventListener('click', async (e) => {
     loadState(); loadDashExtras();
   }
 });
+
+function renderDashModels(r) {
+  const box = $('#dash-models');
+  if (!box) return;
+  if (!r?.ok || !r.models?.length) { box.innerHTML = `<p class="hint">LM Studio model catalog unavailable: ${esc(r?.error || 'no models')}</p>`; return; }
+  const opts = r.models.map((m) => `<option value="${esc(m.id)}">${esc(m.id)}${m.context_length ? ` · ctx ${m.context_length}` : ''}</option>`).join('');
+  box.innerHTML = `<div class="model-toolbar"><div><b>LM Studio models</b><span class="role"> ${r.models.length} exposed · exact IDs from /v1/models</span></div><button id="refresh-models" type="button">↻ refresh</button></div>` +
+    bots.map((b) => `<div class="model-row"><span class="model-name" style="color:${b.color}">${esc(b.name)}</span><select data-model-bot="${esc(b.name)}"><option value="">${esc(b.model || (b.name === 'HermesBot' ? 'bridge current' : 'current / startup'))}</option>${opts}</select><span class="role">${b.name === 'HermesBot' ? 'live bridge switch' : 'live next think'}</span></div>`).join('');
+  box.querySelector('#refresh-models')?.addEventListener('click', () => loadDashExtras());
+  box.querySelectorAll('[data-model-bot]').forEach((sel) => sel.addEventListener('change', async () => {
+    if (!sel.value) return;
+    sel.disabled = true;
+    const r2 = await api('/api/model', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: sel.dataset.modelBot, model: sel.value }) });
+    sel.disabled = false;
+    toast(r2.ok ? `${sel.dataset.modelBot} → ${sel.value}` : ('model failed: ' + (r2.error || '?')));
+    if (r2.ok) loadState();
+  }));
+}
 
 // ── dashboard: give items ──
 const COMMON_ITEMS = ['bread', 'cooked_beef', 'cooked_porkchop', 'apple', 'torch', 'iron_sword', 'iron_pickaxe', 'iron_axe', 'shield', 'bow', 'arrow', 'oak_log', 'oak_planks', 'cobblestone', 'iron_ingot', 'coal', 'diamond', 'gray_bed', 'chest', 'furnace', 'boat', 'leather_chestplate', 'bucket', 'shears', 'fishing_rod'];
@@ -550,15 +568,32 @@ async function loadTeam() {
 const HOUSE = [50, 63, 85];
 const BEDS = [[46, 77], [48, 77], [50, 77], [52, 77]];
 let terrainCache = null;
+const mapView = { zoom: 1, panX: 0, panY: 0, bound: false };
+function mapControls() {
+  if (mapView.bound) return;
+  const cv = $('#map'); if (!cv) return;
+  mapView.bound = true;
+  const change = (d) => { mapView.zoom = Math.max(.55, Math.min(5, mapView.zoom + d)); drawMap(); };
+  $('#map-in')?.addEventListener('click', () => change(.25));
+  $('#map-out')?.addEventListener('click', () => change(-.25));
+  $('#map-reset')?.addEventListener('click', () => { mapView.zoom = 1; mapView.panX = 0; mapView.panY = 0; drawMap(); });
+  $('#map-follow')?.addEventListener('change', () => { terrainCache = null; drawMap(); });
+  let drag = null;
+  cv.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, px: mapView.panX, py: mapView.panY }; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', (e) => { if (drag) { mapView.panX = drag.px + e.clientX - drag.x; mapView.panY = drag.py + e.clientY - drag.y; drawMap(); } });
+  cv.addEventListener('pointerup', () => { drag = null; });
+  cv.addEventListener('wheel', (e) => { e.preventDefault(); change(e.deltaY < 0 ? .2 : -.2); }, { passive: false });
+}
 async function drawMap() {
+  mapControls();
   const cv = $('#map');
   if (!cv) return;
   const ctx = cv.getContext('2d');
   const W = cv.width;
   let xs = [HOUSE[0]], zs = [HOUSE[2]];
   bots.forEach((b) => { if (b.pos) { xs.push(b.pos[0]); zs.push(b.pos[2]); } });
-  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-  const cz = (Math.min(...zs) + Math.max(...zs)) / 2;
+  const cx = ($('#map-follow')?.checked && careBot && bots.find((b) => b.name === careBot)?.pos?.[0]) || (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cz = ($('#map-follow')?.checked && careBot && bots.find((b) => b.name === careBot)?.pos?.[2]) || (Math.min(...zs) + Math.max(...zs)) / 2;
   const size = Math.max(UI.mapMin || 160, Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs)) + 60);
   const key = `${Math.round(cx / 8) * 8},${Math.round(cz / 8) * 8},${Math.round(size / 16) * 16}`;
   if (!terrainCache || terrainCache.key !== key) {
@@ -576,8 +611,10 @@ async function drawMap() {
     }
   }
   const t = terrainCache.t;
-  const px = (x) => t ? (x - t.x0) / t.step / t.w * W : W / 2;
-  const pz = (z) => t ? (z - t.z0) / t.step / t.w * W : W / 2;
+  const rawPx = (x) => t ? (x - t.x0) / t.step / t.w * W : W / 2;
+  const rawPz = (z) => t ? (z - t.z0) / t.step / t.w * W : W / 2;
+  const px = (x) => W / 2 + (rawPx(x) - W / 2) * mapView.zoom + mapView.panX;
+  const pz = (z) => W / 2 + (rawPz(z) - W / 2) * mapView.zoom + mapView.panY;
   if (t) {
     const img = ctx.createImageData(t.w, t.w);
     for (let i = 0; i < t.cells.length; i++) {
@@ -589,7 +626,8 @@ async function drawMap() {
     off.width = t.w; off.height = t.w;
     off.getContext('2d').putImageData(img, 0, 0);
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(off, 0, 0, W, W);
+    ctx.save(); ctx.translate(W / 2 + mapView.panX, W / 2 + mapView.panY); ctx.scale(mapView.zoom, mapView.zoom);
+    ctx.drawImage(off, -W / 2, -W / 2, W, W); ctx.restore();
   }
   // beds + house + bots
   ctx.fillStyle = '#faa81a';

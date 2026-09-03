@@ -42,7 +42,7 @@
     </div>
     <div id="messages"></div>
     <div id="status-cards"></div>
-    <div id="map-pane"><div class="panel wide"><h2>🗺 Village map</h2><p class="hint">Live positions, top-down. House at 50,63,85.</p><canvas id="map" width="560" height="560"></canvas></div></div>
+    <div id="map-pane"><div class="panel wide"><h2>🗺 Village map</h2><p class="hint">Live high-resolution terrain. Scroll to zoom, drag to pan, click a bot marker to inspect.</p><div class="map-tools"><button id="map-out" type="button">−</button><button id="map-reset" type="button">⌖ reset</button><button id="map-in" type="button">+</button><label><input id="map-follow" type="checkbox"> follow selected</label><span class="map-legend"><i style="background:#5865f2"></i>house <i style="background:#faa81a"></i>beds <i style="background:#57a25c"></i>bots</span></div><canvas id="map" width="900" height="900"></canvas><div id="map-readout" class="role">terrain ready</div></div></div>
     <div id="goal-pane">
       <div class="panel">
         <h2>🎯 Village goal</h2>
@@ -75,6 +75,7 @@
       <div class="panel wide">
         <h2>🧠 Brain &amp; mission</h2>
         <div id="dash-brain"><p class="hint">loading…</p></div>
+        <div id="dash-models"><p class="hint">loading LM Studio models…</p></div>
       </div>
       <div class="panel wide">
         <h2>📡 Operations feed</h2>

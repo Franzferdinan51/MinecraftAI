@@ -147,6 +147,8 @@ body[data-view="map"] #messages,body[data-view="map"] #composer{display:none}
 .inv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:4px}
 .inv-cell{background:#2b2d31;border-radius:6px;padding:5px 8px;font-size:12px;display:flex;justify-content:space-between;gap:6px}
 .inv-cell b{color:#faa81a}
+.model-toolbar{display:flex;justify-content:space-between;align-items:center;margin:12px 0 6px}.model-row{display:grid;grid-template-columns:110px minmax(180px,1fr) 120px;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid #1e1f22}.model-row select{background:#383a40;color:var(--text);border:0;border-radius:6px;padding:7px;font-size:12px}.model-name{font-weight:700;font-size:13px}.offline-note{color:#ed9da0;font-size:12px}
+.map-tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0}.map-tools button{min-width:32px;padding:6px 10px}.map-tools label{font-size:12px;color:var(--muted)}.map-legend{margin-left:auto;color:var(--muted);font-size:11px}.map-legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-left:8px}
 .activity-row{display:flex;gap:8px;padding:7px 8px;border-bottom:1px solid #1e1f22;font-size:12px}
 .activity-icon{width:20px;text-align:center}.activity-row .role{font-size:11px}.activity-row>div{min-width:0;overflow-wrap:anywhere}
 @media (max-width:1000px){#channels{width:190px}#members{width:210px}.vital-grid{grid-template-columns:1fr}}
