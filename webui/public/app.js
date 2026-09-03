@@ -301,55 +301,68 @@ async function loadTeam() {
   } catch {}
 }
 
-// ── live map (auto-fits all bot positions + house) ──
+// ── live map: real terrain from the world save + bot dots ──
 const HOUSE = [50, 63, 85];
 const BEDS = [[46, 77], [48, 77], [50, 77], [52, 77]];
-function drawMap() {
+let terrainCache = null;
+async function drawMap() {
   const cv = $('#map');
   if (!cv) return;
   const ctx = cv.getContext('2d');
   const W = cv.width;
-  // Bounds: house + every known bot pos, padded, min 40 blocks across.
   let xs = [HOUSE[0]], zs = [HOUSE[2]];
   bots.forEach((b) => { if (b.pos) { xs.push(b.pos[0]); zs.push(b.pos[2]); } });
-  let minX = Math.min(...xs) - 12, maxX = Math.max(...xs) + 12;
-  let minZ = Math.min(...zs) - 12, maxZ = Math.max(...zs) + 12;
-  const span = Math.max(maxX - minX, maxZ - minZ, 40);
-  const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
-  minX = cx - span / 2; maxX = cx + span / 2; minZ = cz - span / 2; maxZ = cz + span / 2;
-  const px = (x) => (x - minX) / span * W;
-  const pz = (z) => (z - minZ) / span * W;
-  ctx.fillStyle = '#101114'; ctx.fillRect(0, 0, W, W);
-  ctx.strokeStyle = '#3a3d44'; ctx.lineWidth = 1;
-  const step = Math.max(5, Math.round(span / 14 / 5) * 5);
-  ctx.fillStyle = '#6b7078'; ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
-  for (let gx = Math.ceil(minX / step) * step; gx <= maxX; gx += step) {
-    ctx.beginPath(); ctx.moveTo(px(gx), 0); ctx.lineTo(px(gx), W); ctx.stroke();
-    ctx.fillText(gx, px(gx) + 3, 12);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cz = (Math.min(...zs) + Math.max(...zs)) / 2;
+  const size = Math.max(160, Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs)) + 60);
+  const key = `${Math.round(cx / 8) * 8},${Math.round(cz / 8) * 8},${Math.round(size / 16) * 16}`;
+  if (!terrainCache || terrainCache.key !== key) {
+    ctx.fillStyle = '#101114'; ctx.fillRect(0, 0, W, W);
+    ctx.fillStyle = '#b5bac1'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('rendering terrain…', W / 2, W / 2);
+    try {
+      const r = await api(`/api/terrain?cx=${cx}&cz=${cz}&size=${size}`);
+      if (!r.ok) throw new Error(r.error || 'no terrain');
+      terrainCache = { key, t: r };
+    } catch (e) {
+      ctx.fillStyle = '#101114'; ctx.fillRect(0, 0, W, W);
+      ctx.fillStyle = '#ed4245'; ctx.fillText('terrain failed — dots only', W / 2, W / 2);
+      terrainCache = { key, t: null };
+    }
   }
-  for (let gz = Math.ceil(minZ / step) * step; gz <= maxZ; gz += step) {
-    ctx.beginPath(); ctx.moveTo(0, pz(gz)); ctx.lineTo(W, pz(gz)); ctx.stroke();
-    ctx.fillText(gz, 4, pz(gz) - 3);
+  const t = terrainCache.t;
+  const px = (x) => t ? (x - t.x0) / t.step / t.w * W : W / 2;
+  const pz = (z) => t ? (z - t.z0) / t.step / t.w * W : W / 2;
+  if (t) {
+    const img = ctx.createImageData(t.w, t.w);
+    for (let i = 0; i < t.cells.length; i++) {
+      const c = t.cells[i] || 0x0d0e12;
+      img.data[i * 4] = (c >> 16) & 255; img.data[i * 4 + 1] = (c >> 8) & 255;
+      img.data[i * 4 + 2] = c & 255; img.data[i * 4 + 3] = 255;
+    }
+    const off = document.createElement('canvas');
+    off.width = t.w; off.height = t.w;
+    off.getContext('2d').putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(off, 0, 0, W, W);
   }
-  // beds + house
+  // beds + house + bots
   ctx.fillStyle = '#faa81a';
   BEDS.forEach(([x, z]) => ctx.fillRect(px(x) - 3, pz(z) - 3, 6, 6));
   ctx.fillStyle = '#5865f2';
-  ctx.beginPath(); ctx.arc(px(HOUSE[0]), pz(HOUSE[2]), 9, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(px(HOUSE[0]), pz(HOUSE[2]), 9, 0, 7); ctx.fill(); ctx.stroke();
   ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText('HOUSE', px(HOUSE[0]), pz(HOUSE[2]) - 13);
-  // bots (clamped to edge with name so nobody vanishes)
-  ctx.textAlign = 'center';
   bots.forEach((b) => {
     if (!b.pos) return;
     const cxp = Math.min(W - 10, Math.max(10, px(b.pos[0])));
     const czp = Math.min(W - 10, Math.max(10, pz(b.pos[2])));
     ctx.fillStyle = b.paused ? '#555' : b.color;
     ctx.beginPath(); ctx.arc(cxp, czp, 10, 0, 7); ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
     ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif';
     ctx.fillText(b.name, cxp, czp - 14);
-    ctx.fillStyle = '#b5bac1'; ctx.font = '10px sans-serif';
-    ctx.fillText(`${b.pos[0]},${b.pos[2]}`, cxp, czp + 22);
   });
 }
 

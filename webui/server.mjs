@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { renderTerrain } from './terrain.mjs';
+
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.WEBUI_PORT || 3100);
 
@@ -139,7 +141,18 @@ const server = http.createServer(async (req, res) => {
       }));
     } catch { return json(res, 400, { ok: false, error: 'bad json' }); }
   }
-  // ── team radio: controller PLAN/claim/ack feed ──
+  // ── terrain: real top-down surface render from the world save ──
+  if (req.method === 'GET' && url.pathname === '/api/terrain') {
+    try {
+      const cx = Number(url.searchParams.get('cx') || 50);
+      const cz = Number(url.searchParams.get('cz') || 85);
+      const size = Math.max(64, Math.min(512, Number(url.searchParams.get('size') || 384)));
+      const grid = await renderTerrain(cx, cz, size, 0.5);
+      return json(res, 200, { ok: true, ...grid });
+    } catch (e) {
+      return json(res, 500, { ok: false, error: 'terrain failed: ' + String(e.message || e).slice(0, 150) });
+    }
+  }
   if (req.method === 'GET' && url.pathname === '/api/team') {
     return json(res, 200, await botFetch(3003, '/team'));
   }
