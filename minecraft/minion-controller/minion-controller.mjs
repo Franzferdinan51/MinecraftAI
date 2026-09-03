@@ -50,6 +50,7 @@ if (!Array.isArray(minions) || minions.length === 0) {
 const LMS_URL = (process.env.LMS_URL || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
 const MC_CLI = process.env.MC_CLI || `${process.env.HOME}/.local/bin/mc`;
 const BRIDGE_PORT = parseInt(process.env.MINION_BRIDGE_PORT || '3003', 10);
+const DEFAULT_MC_API = process.env.MC_API_URL || 'http://127.0.0.1:3001';
 
 const PROMPT_TMPL = (name) => `You are ${name}, an AI player in a Minecraft world.
 
@@ -102,9 +103,12 @@ Rules:
 4. Do not destroy other players' builds.
 5. Be brief. THINK in one sentence, ACT in one line.`;
 
-function callMc(args) {
+function callMc(args, apiUrl = DEFAULT_MC_API) {
   return new Promise((resolve, reject) => {
-    const proc = spawn(MC_CLI, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const proc = spawn(MC_CLI, args, {
+      env: { ...process.env, MC_API_URL: apiUrl },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
     let out = '', err = '';
     proc.stdout.on('data', (c) => { out += c.toString(); });
     proc.stderr.on('data', (c) => { err += c.toString(); });
@@ -147,8 +151,9 @@ async function tick(minion) {
   if (entry.pending) return;
   entry.pending = true;
   try {
-    const status = await callMc(['status']);
-    const chat = await callMc(['read_chat', '5']);
+    const apiUrl = minion.api_url || DEFAULT_MC_API;
+    const status = await callMc(['status'], apiUrl);
+    const chat = await callMc(['read_chat', '5'], apiUrl);
     const observation = `STATUS:\n${status}\n\nCHAT:\n${chat}\n\nLAST ACTION: ${entry.last_action}`;
     entry.last_observation = observation;
     entry.ticks += 1;
@@ -165,7 +170,7 @@ async function tick(minion) {
       return;
     }
     try {
-      const out = await callMc(tokens.slice(1));
+      const out = await callMc(tokens.slice(1), apiUrl);
       entry.last_action = `${think || ''} | ${act} -> ${out.slice(0, 120)}`;
     } catch (err) {
       entry.last_action = `${act} -> ERROR ${err.message}`;

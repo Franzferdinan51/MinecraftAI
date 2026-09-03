@@ -20,8 +20,9 @@ The stack has four moving parts:
    Mineflayer + `minecraft-data` package lag.
 3. An LM Studio bridge: a Node service that calls the local model every
    six seconds, parses one decision, and issues one `mc` command.
-4. A minion controller: the same loop, run in parallel for several bot
-   bodies, each with its own model and tick interval.
+4. A minion controller: five independent Mineflayer processes and
+   reasoning loops, each with its own username and API port, using
+   `minecraft/minion-controller/config.json`.
 
 These parts are independent. The bot can run without the bridge. The bridge
 can be replaced with any other agent framework that can call the `mc` CLI.
@@ -97,6 +98,7 @@ bash -n minecraft/start-vanilla-server.sh
 bash -n minecraft/start-bot-server.sh
 bash -n minecraft/start-bridge.sh
 bash -n minecraft/start-minion-controller.sh
+bash -n minecraft/start-geyser.sh
 bash -n minecraft/stop-all.sh
 bash -n mineflayer-26.2-fork/install-26.2-fork.sh
 ```
@@ -192,6 +194,7 @@ about reverse-engineering Minecraft protocol packets.
 │   ├── start-bot-server.sh
 │   ├── start-bridge.sh
 │   ├── start-minion-controller.sh
+│   ├── start-geyser.sh
 │   ├── stop-all.sh
 │   └── minion-controller/
 │       ├── config.json

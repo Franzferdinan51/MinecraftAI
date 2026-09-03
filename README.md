@@ -54,9 +54,11 @@ Three things, layered:
    `mc status` / `mc chat` loop, and writes its decisions back through
    the `mc` CLI. The bot is real, the body is real, the world is real.
 3. **Minion Controller** (`minecraft/minion-controller/`) — the same
-   reasoning loop, in parallel, for several bot bodies. Lets you
-   populate a vanilla world with a small cast of named characters
-   (Steve, Reed, Moss, Flint, Ember, ...) all driven by local models.
+   reasoning loop, in parallel, for several independent bot bodies. Each
+   minion has its own Mineflayer process, Minecraft username, API port,
+   inventory, location, model, and tick interval. This is what populates
+   the world with actual AI players; it does not send five prompts to
+   HermesBot.
 
 ## Quick start
 
@@ -67,9 +69,11 @@ Three things, layered:
 #    (see mineflayer-26.2-fork/install-26.2-fork.sh)
 # 3. Start the bot server.
 minecraft/start-bot-server.sh
-# 4. Start the LM Studio bridge.
+# 4. Optional: start Geyser for Bedrock phone clients.
+minecraft/start-geyser.sh
+# 5. Start the LM Studio bridge.
 minecraft/start-bridge.sh
-# 5. Connect with your Minecraft client.
+# 6. Connect with your Minecraft client.
 #    Server address: localhost:25565 (or batman-2:25565 from the LAN)
 ```
 

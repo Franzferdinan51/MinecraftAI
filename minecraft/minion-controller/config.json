@@ -1,9 +1,7 @@
-{
-  "minions": [
-    { "name": "Steve",  "model": "google/gemma-4-26b-a4b-qat", "interval_ms": 6000 },
-    { "name": "Reed",   "model": "google/gemma-4-26b-a4b-qat", "interval_ms": 7000 },
-    { "name": "Moss",   "model": "ornith-1.5-9b",              "interval_ms": 8000 },
-    { "name": "Flint",  "model": "ornith-1.5-9b",              "interval_ms": 7500 },
-    { "name": "Ember",  "model": "ornith-1.5-9b",              "interval_ms": 7500 }
-  ]
-}
+[
+  { "name": "Steve",  "model": "ornith-1.5-9b", "interval_ms": 12000, "api_url": "http://127.0.0.1:3011" },
+  { "name": "Reed",   "model": "ornith-1.5-9b", "interval_ms": 14000, "api_url": "http://127.0.0.1:3012" },
+  { "name": "Moss",   "model": "ornith-1.5-9b", "interval_ms": 16000, "api_url": "http://127.0.0.1:3013" },
+  { "name": "Flint",  "model": "ornith-1.5-9b", "interval_ms": 18000, "api_url": "http://127.0.0.1:3014" },
+  { "name": "Ember",  "model": "ornith-1.5-9b", "interval_ms": 20000, "api_url": "http://127.0.0.1:3015" }
+]
