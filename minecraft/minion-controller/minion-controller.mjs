@@ -101,10 +101,11 @@ Available actions:
 
 Rules:
 1. Survival first. If health is below 10, \`mc eat\`.
-2. After three observations in a row, take an action.
-3. If a player asked for something in chat, do that.
-4. Do not destroy other players' builds.
-5. Be brief. THINK in one sentence, ACT in one line.`;
+2. The village mission has priority. Do not choose \`NONE\` merely because the scene is unfamiliar; gather, move, build, farm, or communicate.
+3. After three observations in a row, take an action. Never loop observations.
+4. If a player asked for something in chat, do that.
+5. Do not destroy other players' builds.
+6. Be brief. THINK in one sentence, ACT in one line.`;
 
 function callMc(args, apiUrl = DEFAULT_MC_API) {
   return new Promise((resolve, reject) => {
@@ -155,6 +156,14 @@ for (const m of minions) {
   state.set(m.name, { last_observation: '', last_action: 'NONE — initialized', pending: false, ticks: 0 });
 }
 
+function fallbackAction(minion, status) {
+  const role = (minion.role || '').toLowerCase();
+  if (role.includes('farmer')) return 'mc collect grass_block 3';
+  if (role.includes('miner')) return 'mc collect stone 3';
+  if (role.includes('scout') || role.includes('defender')) return 'mc collect oak_log 1';
+  return 'mc collect oak_log 2';
+}
+
 async function tick(minion) {
   const entry = state.get(minion.name);
   if (entry.pending) return;
@@ -168,10 +177,10 @@ async function tick(minion) {
     entry.ticks += 1;
     const reply = await lmsComplete(minion.model, observation, minion.name, minion.role);
     const think = (reply.match(/THINK:\s*(.+)/) || [, ''])[1].trim();
-    const act = (reply.match(/ACT:\s*(.+)/) || [, ''])[1].trim();
+    let act = (reply.match(/ACT:\s*(.+)/) || [, ''])[1].trim();
     if (!act || act.toUpperCase() === 'NONE') {
-      entry.last_action = `NONE — ${think || 'no action'}`;
-      return;
+      act = fallbackAction(minion, status);
+      entry.last_action = `${think || 'model idle'} | fallback ${act}`;
     }
     const tokens = act.split(/\s+/);
     if (tokens[0] !== 'mc') {
