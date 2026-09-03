@@ -409,6 +409,26 @@ const server = http.createServer(async (req, res) => {
     const all = await Promise.all(BOTS.map(async (b) => [b.name, await botFetch(b.port, '/inventory')]));
     return json(res, 200, { ok: true, inventories: Object.fromEntries(all.map(([n, r]) => [n, r.ok ? r.data : { error: r.error || 'offline' }])) });
   }
+  // ── operations feed: auditable recent chat, web actions, and bot deaths ──
+  if (req.method === 'GET' && url.pathname === '/api/activity') {
+    const count = Math.min(100, Math.max(10, Number(url.searchParams.get('count') || 40)));
+    const [chat, ...deaths] = await Promise.all([
+      botFetch(3001, '/chat?count=40'),
+      ...BOTS.map((b) => botFetch(b.port, '/deaths')),
+    ]);
+    const events = [
+      ...(chat.data?.messages || []).map((m) => ({ time: m.time, kind: m.overheard ? 'nearby' : 'chat', title: m.from, detail: m.message })),
+      ...webLog.map((m) => ({ time: m.time, kind: 'control', title: 'Mission Control', detail: m.message })),
+      ...deaths.flatMap((r, i) => r.data?.last_death ? [{ time: Date.now() - (r.data.last_death.seconds_ago || 0) * 1000, kind: 'death', title: BOTS[i].name, detail: r.data.last_death.cause || 'death' }] : []),
+    ].sort((a, b) => b.time - a.time).slice(0, count);
+    return json(res, 200, { ok: true, events });
+  }
+  // ── clear every bot queue, deliberately separate from stop/cancel ──
+  if (req.method === 'POST' && url.pathname === '/api/queues/clear') {
+    const results = await Promise.all(BOTS.filter((b) => b.name !== 'HermesBot').map(async (b) => [b.name, await botFetch(b.port, '/queue/clear', { method: 'POST' })]));
+    webLog.push({ time: Date.now(), from: 'Duckets (web)', message: '[control] cleared all bot queues', private: false, channel: 'public' });
+    return json(res, 200, { ok: results.every(([, r]) => r.ok !== false), results: Object.fromEntries(results) });
+  }
   if (req.method === 'POST' && url.pathname === '/api/manage') {
     try {
       const body = await readBody(req);

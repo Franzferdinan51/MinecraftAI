@@ -147,3 +147,7 @@ body[data-view="map"] #messages,body[data-view="map"] #composer{display:none}
 .inv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:4px}
 .inv-cell{background:#2b2d31;border-radius:6px;padding:5px 8px;font-size:12px;display:flex;justify-content:space-between;gap:6px}
 .inv-cell b{color:#faa81a}
+.activity-row{display:flex;gap:8px;padding:7px 8px;border-bottom:1px solid #1e1f22;font-size:12px}
+.activity-icon{width:20px;text-align:center}.activity-row .role{font-size:11px}.activity-row>div{min-width:0;overflow-wrap:anywhere}
+@media (max-width:1000px){#channels{width:190px}#members{width:210px}.vital-grid{grid-template-columns:1fr}}
+@media (max-width:720px){#rail{width:54px}.guild,.dm-dot{width:38px;height:38px}#channels{width:170px}#members{display:none}#chan-topic{display:none}.panel{padding:14px}}

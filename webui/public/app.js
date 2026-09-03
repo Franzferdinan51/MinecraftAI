@@ -327,7 +327,7 @@ async function loadDashExtras() {
     const [s, inv] = await Promise.all([api('/api/server'), api('/api/inventories')]);
     if (view !== 'dash') return;
     serverSnap = s.ok ? s : { error: s.error };
-    renderDashServer(); renderDashInv(inv.ok ? inv.inventories : null); renderDashBrain(); renderDashGive(); renderDashSettings();
+    renderDashServer(); renderDashInv(inv.ok ? inv.inventories : null); renderDashBrain(); renderDashGive(); renderDashSettings(); renderDashActivity();
   } catch { /* retry next tick */ }
 }
 function renderDashServer() {
@@ -405,6 +405,28 @@ function renderDashInv(all) {
     };
   });
 }
+
+function renderDashActivity() {
+  const box = $('#dash-activity');
+  if (!box) return;
+  api('/api/activity?count=30').then((r) => {
+    if (!r.ok) { box.innerHTML = '<p class="hint">feed offline</p>'; return; }
+    box.innerHTML = r.events.length ? r.events.map((e) => {
+      const icon = e.kind === 'death' ? '💀' : e.kind === 'control' ? '⚙' : e.kind === 'nearby' ? '👂' : '💬';
+      return `<div class="activity-row"><span class="activity-icon">${icon}</span><div><b>${esc(e.title)}</b><span class="role"> · ${esc(e.kind)} · ${fmtTime(e.time)}</span><div>${esc(e.detail)}</div></div></div>`;
+    }).join('') : '<p class="hint">No recent events.</p>';
+  }).catch(() => { box.innerHTML = '<p class="hint">feed offline</p>'; });
+}
+
+// ── dashboard: queue maintenance ──
+document.addEventListener('click', async (e) => {
+  if (e.target && e.target.id === 'clear-all-queues') {
+    if (!confirm('Clear all waiting tasks? Currently running actions are left alone.')) return;
+    const r = await api('/api/queues/clear', { method: 'POST' });
+    toast(r.ok ? 'all waiting queues cleared' : ('failed: ' + (r.error || '?')));
+    loadState(); loadDashExtras();
+  }
+});
 
 // ── dashboard: give items ──
 const COMMON_ITEMS = ['bread', 'cooked_beef', 'cooked_porkchop', 'apple', 'torch', 'iron_sword', 'iron_pickaxe', 'iron_axe', 'shield', 'bow', 'arrow', 'oak_log', 'oak_planks', 'cobblestone', 'iron_ingot', 'coal', 'diamond', 'gray_bed', 'chest', 'furnace', 'boat', 'leather_chestplate', 'bucket', 'shears', 'fishing_rod'];
