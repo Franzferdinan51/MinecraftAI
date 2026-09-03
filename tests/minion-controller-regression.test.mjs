@@ -31,8 +31,12 @@ assert.equal(
   'a low-health bot with no food and no nearby hostile must continue into recovery/gameplay instead of fleeing forever',
 );
 
-const fallbackAction = loadFunction('fallbackAction');
-const recoveryAfterFailedAction = loadFunction('recoveryAfterFailedAction', `const fallbackAction = ${fallbackAction.toString()};`);
+const houseHelpers = `const HOUSE = { x: 50, y: 63, z: 85 };
+const HOUSE_SAFE_RADIUS = 8;
+${functionSource('houseRally')}
+${functionSource('nearHouse')};`;
+const fallbackAction = loadFunction('fallbackAction', houseHelpers);
+const recoveryAfterFailedAction = loadFunction('recoveryAfterFailedAction', `${houseHelpers}\nconst fallbackAction = ${fallbackAction.toString()};`);
 const blockedGatherStatus = JSON.stringify({
   data: {
     position: { x: 0, y: 70, z: 0 },
@@ -56,13 +60,14 @@ assert.equal(
 const recentHumanMessages = loadFunction('humanMessages');
 const chatFixture = JSON.stringify({ data: { unreadChat: [
   { from: 'Duckets', message: 'new task', ago: '24s' },
-  { from: 'Duckets', message: 'old task', ago: '476s' },
+  { from: 'Duckets', message: 'recent task', ago: '476s' },
+  { from: 'Duckets', message: 'old task', ago: '701s' },
   { from: 'Ember', message: 'bot report', ago: '1s' },
 ] } });
 assert.deepEqual(
   recentHumanMessages(chatFixture, ['Steve', 'Reed', 'Moss', 'Flint', 'Ember']),
-  [{ from: 'Duckets', message: 'new task', ago: '24s' }],
-  'only recent human requests should be handled after a controller restart',
+  [{ from: 'Duckets', message: 'new task', ago: '24s' }, { from: 'Duckets', message: 'recent task', ago: '476s' }],
+  'recent human requests within the 600s window should be handled after a controller restart, stale ones ignored',
 );
 
 const directRequestAction = loadFunction('directRequestAction');
@@ -86,18 +91,34 @@ assert.equal(
   'mc craft wooden_sword',
   'a sword request must become a direct crafting action',
 );
+assert.equal(
+  directRequestAction('Reed set your respawn to the bed', 'Duckets'),
+  'mc sleep',
+  'a bed/respawn request must become a direct sleep action',
+);
+const inventoryStatusReply = loadFunction('inventoryStatusReply');
+const woodStatus = JSON.stringify({ data: { inventory: [{ name: 'oak_log', count: 3 }] } });
+assert.ok(
+  inventoryStatusReply({ name: 'Steve' }, woodStatus, 'does anyone have wood').includes('3 oak_log'),
+  'a true supply question must whisper real inventory',
+);
+assert.equal(
+  inventoryStatusReply({ name: 'Steve' }, woodStatus, 'come to me and build the house'),
+  '',
+  'an ordinary order must not trigger a resource whisper',
+);
 
-const regroupAction = loadFunction('regroupAction');
+const regroupAction = loadFunction('regroupAction', houseHelpers);
 const farFromVillage = JSON.stringify({ data: { position: { x: 50, y: 70, z: 50 } } });
 assert.equal(
   regroupAction({ name: 'Reed' }, farFromVillage, { x: 0, y: 70, z: 0 }),
-  'mc goto_near 0 70 0',
-  'a non-planner that drifts away must return to the shared village center before starting unrelated work',
+  'mc bg_goto 56 63 85',
+  'a drifter returns to its yard rally spot outside the house, never into the house block',
 );
 assert.equal(
   regroupAction({ name: 'Steve' }, farFromVillage, { x: 0, y: 70, z: 0 }),
-  '',
-  'the planner anchors the village center and must not be forced to follow itself',
+  'mc bg_goto 44 63 85',
+  'democratic yard: even Steve returns to his rally spot outside the walls',
 );
 
 const builderWithLogs = JSON.stringify({
@@ -157,7 +178,7 @@ assert.equal(
   'background work must not overlap another command for the same minion',
 );
 
-const queuedFallbackAction = loadFunction('queuedFallbackAction', `const fallbackAction = ${fallbackAction.toString()};`);
+const queuedFallbackAction = loadFunction('queuedFallbackAction', `${houseHelpers}\nconst fallbackAction = ${fallbackAction.toString()};`);
 assert.equal(
   queuedFallbackAction({ role: 'house builder and path maker' }, blockedGatherStatus, 'NONE', 5, 1),
   'mc goto_near 8 70 0',

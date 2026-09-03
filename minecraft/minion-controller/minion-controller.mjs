@@ -59,6 +59,21 @@ let lmsQueueDepth = 0;
 const teamChat = [];
 let villageCenter = null;
 const handledHumanChat = new Map();
+// Anti-spam: public chat is team-shared and rate-limited. Whispers are always
+// allowed; public barks require per-bot + team cooldowns.
+const lastPublicChatByBot = new Map();
+let lastTeamPublicChat = 0;
+function canPublicChat(botName, botCooldownMs = 120000, teamCooldownMs = 15000) {
+  const now = Date.now();
+  if (now - lastTeamPublicChat < teamCooldownMs) return false;
+  if (now - (lastPublicChatByBot.get(botName) || 0) < botCooldownMs) return false;
+  return true;
+}
+function markPublicChat(botName) {
+  const now = Date.now();
+  lastPublicChatByBot.set(botName, now);
+  lastTeamPublicChat = now;
+}
 
 const PROMPT_TMPL = (name, role = 'village resident') => `You are ${name}, the ${role}, an AI player in a Minecraft world.
 
@@ -112,7 +127,7 @@ Available actions:
 
 Rules:
 1. SURVIVAL OVERRIDES EVERYTHING: if a hostile mob is close, fight it when healthy and equipped, otherwise flee; if health is low, eat or flee to safety; never continue gathering while being attacked.
-2. PROTECT PLAYER BUILDS — fences, walls, paths, crops, chests, doors, torches, and decorations that any player placed are theirs. Do NOT dig, break, or replace them. Do not walk through fences or crops. If your move or build target would overlap an existing player block, choose a different position. Never run \`mc dig\` or \`mc collect\` against a block another player placed.
+2. PROTECT PLAYER BUILDS — fences, walls, paths, crops, chests, doors, torches, and decorations that any player placed are theirs. Do NOT dig, break, or replace them. ENTER THROUGH DOORS AND GATES ONLY: never break a wall, fence, or door to get inside; if a door is closed, wait outside or ask the player to open it. Do not walk through fences or crops. Stay at your yard spot outside the house unless the player invites you in. Never run \`mc dig\` or \`mc collect\` within 8 blocks of the house (50,63,85).
 3. Treat every \`Human request ... assigned to NAME\` message in TEAM CHAT as a shared team plan. If NAME is you, acknowledge it in chat and make your next physical action advance that request; if another teammate is assigned, choose a supporting task and report what you can contribute.
 4. The village mission has priority. Do not choose \`NONE\` or an observation command as your turn; take a movement, gathering, crafting, building, defense, food, or communication action.
 5. Communication is required at least every second turn: claim tasks, report discoveries/resources, request supplies, warn of danger, and report completed work.
@@ -165,7 +180,25 @@ async function lmsCompleteUnlocked(model, observation, name, role) {
 
 const state = new Map();
 for (const m of minions) {
-  state.set(m.name, { last_observation: '', last_action: 'NONE — initialized', pending: false, activity_pending: false, action_busy: false, ticks: 0 });
+  state.set(m.name, { last_observation: '', last_action: 'NONE — initialized', pending: false, activity_pending: false, action_busy: false, ticks: 0, last_pos: '', stuck_count: 0 });
+}
+
+// Same rounded position across ticks while trying to move = stuck (cave/wall).
+// Cancel the jammed task and turn to find a new path instead of pushing forever.
+function stuckNudge(entry, statusJson) {
+  let key = '';
+  try {
+    const p = JSON.parse(statusJson).data?.position;
+    if (!p) return '';
+    key = `${Math.floor(p.x)},${Math.floor(p.y)},${Math.floor(p.z)}`;
+  } catch { return ''; }
+  if (key && key === entry.last_pos) entry.stuck_count = (entry.stuck_count || 0) + 1;
+  else { entry.last_pos = key; entry.stuck_count = 0; }
+  if ((entry.stuck_count || 0) >= 3 && /goto|collect|dig|follow/.test(entry.last_action)) {
+    entry.stuck_count = 0;
+    return 'STUCK';
+  }
+  return '';
 }
 
 function rememberTeamChat(from, message) {
@@ -189,6 +222,8 @@ function survivalAction(statusJson) {
   if (hostile && hostile.distance <= 10 && (d.health || 0) >= 10) return `mc fight ${hostile.type}`;
   if ((d.health || 0) < 10 && food) return 'mc eat';
   if (hostile && hostile.distance <= 18) return (d.health || 0) >= 14 ? `mc fight ${hostile.type}` : 'mc flee 20';
+  // At night with no threat near home, sleep to set spawn (beds at the house).
+  if (d.isDay === false && !hostile && d.position && typeof nearHouse === 'function' && nearHouse(d.position, 20)) return 'mc sleep';
   return '';
 }
 
@@ -200,8 +235,8 @@ function humanMessages(statusJson, botNames = []) {
     if (!m.from || bots.has(m.from.toLowerCase())) return false;
     const age = Number.parseInt(m.ago, 10);
     // The APIs retain chat history. Ignore stale requests after a controller
-    // restart, while allowing a full model-turn window for new messages.
-    return Number.isNaN(age) || age <= 300;
+    // restart, while allowing a generous window (slow 30-54s thinkers).
+    return Number.isNaN(age) || age <= 600;
   });
 }
 
@@ -227,6 +262,7 @@ function directRequestAction(message, sender) {
   if (/\bfollow me\b/.test(text)) return `mc follow ${sender}`;
   if (/\b(run|flee|retreat)\b/.test(text)) return 'mc flee 20';
   if (/\b(make|craft)\b.*\bsword\b|\bsword\b/.test(text)) return 'mc craft wooden_sword';
+  if (/\b(bed|respawn|sleep|set (your |their |his |her )?spawn)\b/.test(text)) return 'mc sleep';
   if (/\b(kill|attack|fight)\b.*\b(zombie|skeleton|creeper|spider)\b/.test(text)) {
     const mob = (text.match(/\b(zombie|skeleton|creeper|spider)\b/) || [])[1];
     return mob ? `mc fight ${mob}` : '';
@@ -234,28 +270,86 @@ function directRequestAction(message, sender) {
   return '';
 }
 
-function rememberHumanMessage(message) {
-  const key = `${message.from}:${message.message}`;
+function rememberHumanMessage(minionName, message) {
+  const key = `${minionName}:${message.from}:${message.message}`;
   if (handledHumanChat.has(key)) return false;
   handledHumanChat.set(key, Date.now());
   while (handledHumanChat.size > 100) handledHumanChat.delete(handledHumanChat.keys().next().value);
   return true;
 }
+
+// Short truthful progress line so chatter describes real work, not canned spam.
+function progressSummary(minion, statusJson, lastAction = '') {
+  let d = {};
+  try { d = JSON.parse(statusJson).data || {}; } catch {}
+  const pos = d.position ? `${Math.floor(d.position.x)},${Math.floor(d.position.y)},${Math.floor(d.position.z)}` : 'unknown';
+  const inv = (d.inventory || []).filter((i) => i.count > 0).slice(0, 3).map((i) => `${i.count} ${i.name}`).join(', ') || 'empty hands';
+  const act = (lastAction || '').split('->')[0].replace(/^(background work \||queued inference \||human request \|)\s*/, '').trim().slice(0, 90) || 'village work';
+  return `${minion.name} (${minion.role || 'villager'}) at ${pos} holding ${inv} — last did: ${act}`;
+}
+// Answer "does anyone have X / who has X / I need X" with real inventory truth.
+// Without this the model turns supply questions into silence or vague promises.
+function inventoryStatusReply(minion, statusJson, message) {
+  const text = (message || '').toLowerCase();
+  // Only true supply questions — not every order containing "have/has".
+  if (!/(does anyone have|does anybody have|who has|who('| i)s got|do you have|have you got|have any|need (any )?(wood|stone|food|dirt|coal|iron|torch|plank|log|sticks?)|give me|spare|extra)/.test(text)) return '';
+  let wanted = null;
+  if (/wood|log|plank|stick/.test(text)) wanted = /log|wood|plank|stick/;
+  else if (/stone|cobble|deepslate|diorite/.test(text)) wanted = /stone|cobble|deepslate|diorite/;
+  else if (/food|bread|apple|carrot|potato|beef|pork|chicken|eat|hungry/.test(text)) wanted = /bread|apple|carrot|potato|beef|pork|chicken|mutton|fish|stew|wheat|seed/;
+  else if (/coal|iron|ore|diamond|torch|dirt|seed|crop/.test(text)) wanted = /coal|iron|ore|diamond|torch|dirt|seed/;
+  else if (/have|has|need|give|spare/.test(text)) wanted = /./;
+  if (!wanted) return '';
+  let inv = [];
+  try { inv = JSON.parse(statusJson).data?.inventory || []; } catch {}
+  const have = inv.filter((i) => wanted.test(i.name) && i.count > 0);
+  if (have.length > 0) {
+    const list = have.map((i) => `${i.count} ${i.name}`).join(', ');
+    return `${minion.name}: I have ${list}. Tell me where to meet and I'll share.`;
+  }
+  return `${minion.name}: I don't have any spare ${/food|eat|hungry/.test(text) ? 'food' : /stone/.test(text) ? 'stone' : /wood|log|plank/.test(text) ? 'wood' : 'supplies'} on me — I'll gather some now.`;
+}
+// Home anchor (user 2026-09-03: "this is our house"): stragglers regroup to the
+// house yard, NEVER into the house block itself. Per-bot yard spots keep them
+// out of walls/doors; they must use doors, never dig through.
+const HOUSE = { x: 50, y: 63, z: 85 };
+const HOUSE_SAFE_RADIUS = 8;
+function houseRally(minionName) {
+  switch (minionName) {
+    case 'Steve': return { x: 44, y: 63, z: 85 };
+    case 'Reed': return { x: 56, y: 63, z: 85 };
+    case 'Moss': return { x: 50, y: 63, z: 79 };
+    case 'Flint': return { x: 50, y: 63, z: 91 };
+    default: return { x: 47, y: 63, z: 82 };
+  }
+}
+function nearHouse(pos, r = HOUSE_SAFE_RADIUS) {
+  if (!pos) return false;
+  return Math.hypot(pos.x - HOUSE.x, pos.y - HOUSE.y, pos.z - HOUSE.z) < r;
+}
+const villagePositions = new Map();
 function updateVillageCenter(minion, statusJson) {
-  if (minion.name !== 'Steve') return;
   try {
     const pos = JSON.parse(statusJson).data?.position;
-    if (pos) villageCenter = { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) };
+    if (!pos) return;
+    villagePositions.set(minion.name, { x: pos.x, y: pos.y, z: pos.z });
   } catch {}
+  villageCenter = { ...HOUSE };
 }
 
 function regroupAction(minion, statusJson, center) {
-  if (!center || minion.name === 'Steve') return '';
+  if (!center) return '';
   try {
     const pos = JSON.parse(statusJson).data?.position;
     if (!pos) return '';
-    const distance = Math.hypot(pos.x - center.x, pos.y - center.y, pos.z - center.z);
-    if (distance > 16) return `mc goto_near ${center.x} ${center.y} ${center.z}`;
+    // Close enough to home: stay in the yard, never push into the house.
+    if (nearHouse(pos)) return '';
+    const rally = houseRally(minion.name);
+    const distance = Math.hypot(pos.x - rally.x, pos.y - rally.y, pos.z - rally.z);
+    if (distance <= 6) return '';
+    // Long trek to yard: background task so walking isn't cancelled next turn.
+    if (distance > 30) return `mc bg_goto ${rally.x} ${rally.y} ${rally.z}`;
+    return `mc goto_near ${rally.x} ${rally.y} ${rally.z}`;
   } catch {}
   return '';
 }
@@ -272,10 +366,14 @@ function fallbackAction(minion, statusJson, lastAction = '', tick = 0) {
   const visible = hits.map((b) => b.name);
   const known = data.notableBlocks || [];
   const recovery = /can't see|not visible/i.test(lastAction);
-  const targets = recovery && hits.length > 0 ? hits : (known.length > 0 ? known : hits);
+  const rawTargets = recovery && hits.length > 0 ? hits : (known.length > 0 ? known : hits);
+  // Never mine/gather the house itself: drop any target inside the safe radius.
+  const targets = rawTargets.filter((b) => !nearHouse(b.position));
   const role = (minion.role || '').toLowerCase();
   const pos = data.position || { x: 0, y: 70, z: 0 };
   const inv = Object.fromEntries((data.inventory || []).map((i) => [i.name, i.count]));
+  // Builders work at their yard spot, never inside the house walls.
+  const yard = houseRally(minion.name);
   // Stripped logs/wood are not valid plank ingredients in this server build.
   // Treat them as salvage, then gather fresh normal logs rather than retrying
   // an impossible craft forever.
@@ -285,7 +383,7 @@ function fallbackAction(minion, statusJson, lastAction = '', tick = 0) {
   const planks = Object.entries(inv).find(([n, c]) => n.endsWith('_planks') && c >= 4);
   const builder = role.includes('builder') || role.includes('planner');
   if (builder && planks) {
-    return `mc place_fill ${planks[0]} ${Math.floor(pos.x) + 1} ${Math.floor(pos.y) - 1} ${Math.floor(pos.z) + 1} ${Math.floor(pos.x) + 3} ${Math.floor(pos.y)} ${Math.floor(pos.z) + 3} hollow`;
+    return `mc place_fill ${planks[0]} ${yard.x} ${Math.floor(pos.y) - 1} ${yard.z} ${yard.x + 2} ${Math.floor(pos.y)} ${yard.z + 2} hollow`;
   }
   if (builder && craftable) return `mc craft ${craftable}`;
   const wanted = role.includes('farmer') ? ['grass_block', 'dirt']
@@ -296,7 +394,7 @@ function fallbackAction(minion, statusJson, lastAction = '', tick = 0) {
     return `mc goto_near ${target.position.x} ${target.position.y} ${target.position.z}`;
   }
   if ((role.includes('builder') || role.includes('planner')) && tick % 5 === 3) {
-    if (planks) return `mc place_fill ${planks[0]} ${Math.floor(pos.x) + 1} ${Math.floor(pos.y) - 1} ${Math.floor(pos.z) + 1} ${Math.floor(pos.x) + 3} ${Math.floor(pos.y)} ${Math.floor(pos.z) + 3} hollow`;
+    if (planks) return `mc place_fill ${planks[0]} ${yard.x} ${Math.floor(pos.y) - 1} ${yard.z} ${yard.x + 2} ${Math.floor(pos.y)} ${yard.z + 2} hollow`;
     if (craftable) return `mc craft ${craftable}`;
   }
   const choices = role.includes('farmer') ? ['grass_block', 'dirt']
@@ -358,16 +456,18 @@ async function tick(minion) {
     // current human messages; controller teamChat remains its bot coordination feed.
     const freshHumanMessages = humanMessages(status, botNames);
     const chat = freshHumanMessages.map((m) => `<${m.from}> ${m.message}`).join('\n') || '(no new player chat)';
-    const human = freshHumanMessages.find((m) => assignedMinionName(m.message) === minion.name && rememberHumanMessage(m));
+    const human = freshHumanMessages.find((m) => rememberHumanMessage(minion.name, m));
     if (human) {
-      const teamRequest = `Human request from ${human.from}, assigned to ${minion.name}: ${human.message}`;
+      const teamRequest = `Human question to ALL, answered by ${minion.name}: ${human.message}`;
       rememberTeamChat('PLAN', teamRequest);
       const directAction = directRequestAction(human.message, human.from);
       if (directAction) {
+        // Whisper the ack to avoid 5x public spam; one public note only if cooldown allows.
         const reply = `${minion.name}: Executing your request now: ${directAction.replace(/^mc /, '')}.`;
-        // Acknowledge before a long navigation/crafting action so the player
-        // gets an immediate, truthful response instead of a delayed silence.
-        try { await callMc(['chat', reply], apiUrl); rememberTeamChat(minion.name, reply); } catch {}
+        try { await callMc(['chat_to', human.from, reply], apiUrl); rememberTeamChat(minion.name, `to ${human.from}: ${reply}`); } catch {}
+        if (canPublicChat(minion.name)) {
+          try { await callMc(['chat', reply], apiUrl); rememberTeamChat(minion.name, reply); markPublicChat(minion.name); } catch {}
+        }
         try {
           const out = await runMinionAction(entry, parseCommand(directAction).slice(1), apiUrl);
           entry.ticks += 1;
@@ -375,12 +475,23 @@ async function tick(minion) {
         } catch (err) {
           entry.last_action = `human request | ${directAction} -> ERROR ${err.message}`;
           const failure = `${minion.name}: I tried that, but ${err.message.slice(0, 100)}.`;
-          try { await callMc(['chat', failure], apiUrl); rememberTeamChat(minion.name, failure); } catch {}
+          try { await callMc(['chat_to', human.from, failure], apiUrl); } catch {}
         }
         return;
       }
-      const reply = `${minion.name}: I received your request and am assigning the team work now.`;
-      try { await callMc(['chat', reply], apiUrl); rememberTeamChat(minion.name, reply); } catch {}
+      const stock = inventoryStatusReply(minion, status, human.message);
+      if (stock) {
+        // Whisper only — no public echo. That restores the old whisper behavior.
+        try { await callMc(['chat_to', human.from, stock], apiUrl); rememberTeamChat(minion.name, `to ${human.from}: ${stock}`); } catch {}
+        entry.last_action = `human request | inventory whisper -> ${stock.slice(0, 160)}`;
+      } else {
+        // One public progress note per team per 15s, per bot per 120s. Otherwise stay silent and work.
+        if (canPublicChat(minion.name)) {
+          const doing = progressSummary(minion, status, entry.last_action);
+          const reply = `${minion.name}: on it — ${doing}.`;
+          try { await callMc(['chat', reply], apiUrl); rememberTeamChat(minion.name, reply); markPublicChat(minion.name); } catch {}
+        }
+      }
     }
     const urgent = survivalAction(status);
     if (urgent) {
@@ -445,11 +556,12 @@ async function tick(minion) {
         entry.last_action = `${act} -> ERROR ${err.message}`;
       }
     }
-    if (entry.ticks % 2 === 0) {
-      const update = `${minion.name}: ${minion.role || 'village resident'} reporting. I am working on the village mission; tell me what you found.`;
+    if (entry.ticks % 6 === 0 && canPublicChat(minion.name, 180000, 30000)) {
+      const update = progressSummary(minion, status, entry.last_action);
       try {
         await callMc(['chat', update], apiUrl);
         rememberTeamChat(minion.name, update);
+        markPublicChat(minion.name);
         entry.last_action += ' | chat update sent';
       } catch (err) {
         entry.last_action += ` | chat update failed: ${err.message}`;

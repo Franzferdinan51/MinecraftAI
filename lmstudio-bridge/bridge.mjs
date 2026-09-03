@@ -99,16 +99,52 @@ Available actions:
   mc wait N
 
 Rules:
-1. Survival first. If health is below 10, \`mc eat\`.
+1. Survival first. If health is below 10, \`mc eat\`. If hostiles are near and you are not on the player, fight when healthy, otherwise flee.
 2. After three observations in a row, take an action. Never loop observations.
-3. If the player asked for something in chat, do that. Player chat overrides
-   idle plans.
-4. Do not destroy other players' builds. Do not steal from chests.
-5. Be brief. THINK in one sentence, ACT in one line. No code fences.`;
+3. If the player asked for something in chat, do that. Player chat overrides idle plans.
+4. PROTECT PLAYER BUILDS — fences, walls, paths, crops, chests, doors, torches and decorations placed by any player are theirs. Do NOT dig, break, or replace them. If your move/build target would overlap an existing player block, pick a different position. Never run \`mc dig\`, \`mc collect\`, or \`mc place\` against a block you did not place yourself in this session.
+5. Do not destroy other players' builds. Do not steal from chests.
+6. Be brief. THINK in one sentence, ACT in one line. No code fences.`;
+
+// Compact observation: the full raw status JSON (~8KB with scene/stats) was
+// choking the LM Studio engine (400 parse errors). Send essentials only.
+function compactObservation(statusJson, chatText, lastActionText) {
+  let d = {};
+  try { d = JSON.parse(statusJson).data || {}; } catch {}
+  const pos = d.position ? `${Math.floor(d.position.x)},${Math.floor(d.position.y)},${Math.floor(d.position.z)}` : 'unknown';
+  const inv = (d.inventory || []).filter((i) => i.count > 0).map((i) => `${i.name}x${i.count}`).join(', ') || 'empty';
+  const hostiles = (d.nearbyEntities || []).filter((e) => e.kind === 'hostile').map((e) => `${e.type}@${Math.floor(e.distance)}m`).join(', ') || 'none';
+  const blocks = [...(d.scene?.visible_block_hits || []), ...(d.notableBlocks || [])].slice(0, 8).map((b) => b.name).join(', ') || 'none seen';
+  const chat = (chatText || '').slice(-500);
+  return `HP:${d.health ?? '?'} FOOD:${d.food ?? '?'} POS:${pos} HOLD:${d.holding || 'empty'} INV:[${inv}] HOSTILES:[${hostiles}] SEEN:[${blocks}]\nCHAT:${chat}\nLAST:${(lastActionText || '(none)').slice(0, 200)}`;
+}
 
 let lastObservation = '';
 let lastAction = '';
 let pending = false;
+
+function parseCommand(line) {
+  const tokens = [];
+  const re = /"([^"\\]*(?:\\.[^"\\]*)*)"|'([^']*)'|(\S+)/g;
+  let match;
+  while ((match = re.exec(line)) !== null) tokens.push(match[1] ?? match[2] ?? match[3]);
+  return tokens;
+}
+
+function fallbackAction(statusJson) {
+  let data = {};
+  try { data = JSON.parse(statusJson).data || {}; } catch {}
+  const hostile = (data.nearbyEntities || []).find((e) => e.kind === 'hostile');
+  const edible = (data.inventory || []).some((i) => /bread|apple|carrot|potato|beef|pork|chicken|mutton|fish|stew/i.test(i.name) && i.count > 0);
+  if (hostile && (data.health || 0) >= 12) return `mc fight ${hostile.type}`;
+  if ((data.health || 0) < 10 && edible) return 'mc eat';
+  if (hostile) return 'mc flee 20';
+  const blocks = [...(data.scene?.visible_block_hits || []), ...(data.notableBlocks || [])];
+  const wood = blocks.find((b) => /^(dark_oak|oak|birch|jungle|cherry)_log$/.test(b.name));
+  if (wood?.position) return `mc goto_near ${wood.position.x} ${wood.position.y} ${wood.position.z}`;
+  if (wood) return `mc collect ${wood.name} 8`;
+  return 'mc collect dark_oak_log 8';
+}
 
 function callMc(args) {
   return new Promise((resolve, reject) => {
@@ -130,9 +166,9 @@ async function runTurn() {
   if (pending) return;
   pending = true;
   try {
-    const status = await callMc(['status']);
+    const status = await callMc(['status', '--json']);
     const chat = await callMc(['read_chat', '5']);
-    const observation = `STATUS:\n${status}\n\nCHAT:\n${chat}\n\nLAST ACTION: ${lastAction || '(none)'}`;
+    const observation = compactObservation(status, chat, lastAction);
     lastObservation = observation;
 
     const body = {
@@ -159,14 +195,17 @@ async function runTurn() {
     const reply = (json.choices?.[0]?.message?.content || json.choices?.[0]?.message?.reasoning_content || '').trim();
 
     const think = (reply.match(/THINK:\s*(.+)/) || [, ''])[1].trim();
-    const act = (reply.match(/ACT:\s*(.+)/) || [, ''])[1].trim();
+    let act = (reply.match(/ACT:\s*(.+)/) || [, ''])[1].trim();
 
     if (!act || act.toUpperCase() === 'NONE') {
-      lastAction = 'NONE — ' + (think || 'no action');
-      return;
+      act = fallbackAction(status);
     }
 
-    const tokens = act.split(/\s+/);
+    let tokens = parseCommand(act);
+    if (tokens[0] !== 'mc') {
+      act = fallbackAction(status);
+      tokens = parseCommand(act);
+    }
     if (tokens[0] !== 'mc') {
       lastAction = `rejected: ${act}`;
       return;
