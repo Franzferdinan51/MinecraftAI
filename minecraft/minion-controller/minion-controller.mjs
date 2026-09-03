@@ -174,8 +174,9 @@ function parseCommand(line) {
 function fallbackAction(minion, statusJson, lastAction = '') {
   let parsed = {};
   try { parsed = JSON.parse(statusJson); } catch {}
-  const visible = (parsed.data?.nearbyBlocks || []).map((b) => b.name);
-  const notable = parsed.data?.notableBlocks || [];
+  const sceneHits = parsed.data?.scene?.visible_block_hits || [];
+  const visible = sceneHits.map((b) => b.name);
+  const notable = parsed.data?.notableBlocks || sceneHits;
   const role = (minion.role || '').toLowerCase();
   const wanted = role.includes('farmer') ? ['grass_block', 'dirt']
     : role.includes('miner') ? ['stone', 'deepslate', 'diorite']
@@ -207,19 +208,28 @@ async function tick(minion) {
     const reply = await lmsComplete(minion.model, observation, minion.name, minion.role);
     const think = (reply.match(/THINK:\s*(.+)/) || [, ''])[1].trim();
     let act = (reply.match(/ACT:\s*(.+)/) || [, ''])[1].trim();
-    if (!act || act.toUpperCase() === 'NONE') {
+    if (!act || act.toUpperCase() === 'NONE') act = fallbackAction(minion, status, entry.last_action);
+    let tokens = parseCommand(act);
+    if (tokens[0] !== 'mc') act = fallbackAction(minion, status, entry.last_action);
+    tokens = parseCommand(act);
+    if (tokens[1] === 'chat' || tokens[1] === 'chat_to' || tokens[1] === 'wait') {
+      try {
+        const out = await callMc(tokens.slice(1), apiUrl);
+        if (tokens[1] === 'chat') rememberTeamChat(minion.name, tokens.slice(2).join(' '));
+        if (tokens[1] === 'chat_to') rememberTeamChat(minion.name, `to ${tokens[2]}: ${tokens.slice(3).join(' ')}`);
+        entry.last_action = `${think || ''} | ${act} -> ${out.slice(0, 120)}`;
+      } catch (err) {
+        entry.last_action = `${act} -> ERROR ${err.message}`;
+      }
       act = fallbackAction(minion, status, entry.last_action);
-      entry.last_action = `${think || 'model idle'} | fallback ${act}`;
+      tokens = parseCommand(act);
     }
-    const tokens = parseCommand(act);
     if (tokens[0] !== 'mc') {
       entry.last_action = `rejected: ${act}`;
       return;
     }
     try {
       const out = await callMc(tokens.slice(1), apiUrl);
-      if (tokens[1] === 'chat') rememberTeamChat(minion.name, tokens.slice(2).join(' '));
-      if (tokens[1] === 'chat_to') rememberTeamChat(minion.name, `to ${tokens[2]}: ${tokens.slice(3).join(' ')}`);
       entry.last_action = `${think || ''} | ${act} -> ${out.slice(0, 120)}`;
     } catch (err) {
       entry.last_action = `${act} -> ERROR ${err.message}`;
