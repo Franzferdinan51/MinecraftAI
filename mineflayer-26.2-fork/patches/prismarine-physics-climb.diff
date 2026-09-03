@@ -1,0 +1,8 @@
+--- a/node_modules/prismarine-physics/lib/features.json
++++ b/node_modules/prismarine-physics/lib/features.json
+@@ -22,5 +22,5 @@
+   {
+     "name": "climbUsingJump",
+-    "versions": ["1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.20", "1.21", "26.1"]
++    "versions": ["1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.20", "1.21", "26.1", "26.2"]
+   }

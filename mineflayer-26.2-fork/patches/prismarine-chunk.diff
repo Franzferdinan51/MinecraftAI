@@ -1,0 +1,10 @@
+--- a/node_modules/prismarine-chunk/src/index.js
++++ b/node_modules/prismarine-chunk/src/index.js
+@@ -15,7 +15,8 @@
+     '1.20': require('./pc/1.18/chunk'),
+     1.21: require('./pc/1.18/chunk'),
+-    26.1: require('./pc/1.18/chunk')
++    26.1: require('./pc/1.18/chunk'),
++    '26.2': require('./pc/1.18/chunk')
+   },
+   bedrock: {

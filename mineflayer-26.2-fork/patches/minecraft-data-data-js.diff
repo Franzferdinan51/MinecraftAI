@@ -1,0 +1,31 @@
+--- a/node_modules/minecraft-data/data.js
++++ b/node_modules/minecraft-data/data.js
+@@ -1747,6 +1747,27 @@
+       get windows () { return require("./minecraft-data/data/pc/1.16.1/windows.json") },
+       proto: __dirname + '/minecraft-data/data/pc/latest/proto.yml'
+     },
++    '26.2': {
++      get attributes () { return require("./minecraft-data/data/pc/26.2/attributes.json") },
++      get blockCollisionShapes () { return require("./minecraft-data/data/pc/26.2/blockCollisionShapes.json") },
++      get blocks () { return require("./minecraft-data/data/pc/26.2/blocks.json") },
++      get biomes () { return require("./minecraft-data/data/pc/26.2/biomes.json") },
++      get effects () { return require("./minecraft-data/data/pc/26.2/effects.json") },
++      get enchantments () { return require("./minecraft-data/data/pc/26.2/enchantments.json") },
++      get entities () { return require("./minecraft-data/data/pc/26.2/entities.json") },
++      get foods () { return require("./minecraft-data/data/pc/26.2/foods.json") },
++      get instruments () { return require("./minecraft-data/data/pc/26.2/instruments.json") },
++      get items () { return require("./minecraft-data/data/pc/26.2/items.json") },
++      get language () { return require("./minecraft-data/data/pc/26.2/language.json") },
++      get loginPacket () { return require("./minecraft-data/data/pc/26.2/loginPacket.json") },
++      get materials () { return require("./minecraft-data/data/pc/26.2/materials.json") },
++      get particles () { return require("./minecraft-data/data/pc/26.2/particles.json") },
++      get protocol () { return require("./minecraft-data/data/pc/26.2/protocol.json") },
++      get recipes () { return require("./minecraft-data/data/pc/26.2/recipes.json") },
++      get sounds () { return require("./minecraft-data/data/pc/26.2/sounds.json") },
++      get tints () { return require("./minecraft-data/data/pc/26.2/tints.json") },
++      get version () { return require("./minecraft-data/data/pc/26.2/version.json") },
++      get windows () { return require("./minecraft-data/data/pc/1.16.1/windows.json") },
++      proto: __dirname + '/minecraft-data/data/pc/latest/proto.yml'
++    },
+   },
+   'bedrock': {
