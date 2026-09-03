@@ -28,7 +28,7 @@ function fmtTime(t) {
 // ── chat ──
 async function loadChat() {
   try {
-    const r = await api('/api/chat?count=60');
+    const r = await api('/api/chat?count=' + (UI.chatN || 60));
     if (!r.ok) return;
     const box = $('#messages');
     const fresh = visibleMessages(r.messages);
@@ -38,7 +38,8 @@ async function loadChat() {
 }
 function visibleMessages(all) {
   // only messages never rendered; filter by view
-  const fresh = all.filter((m) => !rendered.has(msgKey(m)));
+  let fresh = all.filter((m) => !rendered.has(msgKey(m)));
+  if (!UI.overheard) fresh = fresh.filter((m) => !m.overheard);
   const filt = ($('#chat-filter')?.value || '').toLowerCase();
   const passFilt = (m) => !filt || (m.from + ' ' + m.message).toLowerCase().includes(filt);
   if (view === 'global' || view === 'team') return fresh.filter(passFilt);
@@ -145,7 +146,7 @@ function setView(v) {
     $('#input').placeholder = 'Ask about the village — e.g. what is Moss doing?';
   } else if (v === 'dash') {
     $('#chan-name').textContent = 'dashboard';
-    $('#chan-topic').textContent = 'pause bots, set think pace — live, no restart';
+    $('#chan-topic').textContent = 'fleet vitals · world admin · inventories · settings';
     renderDash();
   } else {
     $('#chan-name').textContent = v;
@@ -236,19 +237,43 @@ document.addEventListener('click', async (e) => {
   }
 });
 
-// ── dashboard ──
+// ── interface settings (persisted) ──
+const UI = Object.assign({ refresh: 5, overheard: true, mapMin: 160, chatN: 60, toasts: true },
+  JSON.parse(localStorage.getItem('hermes-ui') || '{}'));
+function saveUI() { localStorage.setItem('hermes-ui', JSON.stringify(UI)); armTimers(); }
+const _origToast = toast;
+toast = function (msg) { if (UI.toasts) _origToast(msg); };
+
+// ── dashboard: fleet vitals ──
 const PACES = [[30000, '30s'], [45000, '45s'], [60000, '60s'], [90000, '90s'], [120000, '2m'], [180000, '3m']];
+const bar = (v) => { const p = Math.max(0, Math.min(20, v || 0)) * 5; const cls = p > 50 ? 'hp' : p > 25 ? 'food' : 'low'; return `<div class="bar"><i class="${cls}" style="width:${p}%"></i></div>`; };
 function renderDash() {
   const box = $('#dash-rows');
   if (!box) return;
   box.innerHTML = bots.map((b) => `
-    <div class="dash-row">
-      <b style="color:${b.color}">${esc(b.name)}</b>
-      <span class="role">${esc(b.role)} · ${b.ticks != null ? b.ticks + ' thinks' : (b.name === 'HermesBot' ? 'bridge-driven' : '?')} · ${esc((b.last_action || '—').slice(0, 80))}</span>
-      ${b.name === 'HermesBot'
-        ? '<span class="role">pace + pause live in the bridge, not here</span>'
-        : `<select data-pace="${esc(b.name)}">${PACES.map(([ms, label]) => `<option value="${ms}" ${b.interval_ms === ms ? 'selected' : ''}>${label}</option>`).join('')}</select>
-           <button class="pause-btn ${b.paused ? 'on' : ''}" data-pause="${esc(b.name)}" type="button">${b.paused ? '▶ Resume' : '⏸ Pause'}</button>`}
+    <div class="dash-row vital ${b.paused ? 'paused' : ''} ${b.online ? '' : 'off'}">
+      <div class="vital-head"><b style="color:${b.color}">${esc(b.name)}</b>
+        <span class="dot ${b.online ? 'on' : 'off'}">● ${b.online ? 'online' : 'offline'}</span>
+        ${b.paused ? '<span class="paused-tag">PAUSED</span>' : ''}</div>
+      <div class="role">${esc(b.role)} · ${b.ticks != null ? b.ticks + ' thinks' : (b.name === 'HermesBot' ? 'bridge-driven' : '?')}</div>
+      ${b.online ? `
+      <div class="vital-grid">
+        <div>❤ ${b.health ?? '?'}${bar(b.health)}</div>
+        <div>🍖 ${b.food ?? '?'}${bar(b.food)}</div>
+        <div>📍 ${b.pos ? b.pos.join(', ') : '?'} · ${esc(b.time || '')}</div>
+        <div>🤲 ${esc(b.holding)} · 🎒 ${b.invCount ?? '?'} slots</div>
+        <div>📋 queue: ${b.queueRunning ? '▶ ' + esc(b.queueRunning) : '—'}${b.queueLen > 1 ? ` (+${b.queueLen - 1})` : ''}</div>
+        <div>💀 ${b.deaths != null ? b.deaths + ' deaths' : '—'}${b.lastDeath ? ' · ' + esc(b.lastDeath) : ''}</div>
+      </div>
+      <div class="vital-doing">${esc((b.last_action || '—').slice(0, 140))}</div>` : `<div class="role">${esc(b.error || 'no response')}</div>`}
+      <div class="vital-ops">
+        <button data-dinv="${esc(b.name)}" type="button">🎒 Bags</button>
+        ${b.name === 'HermesBot' ? '<span class="role">pace + pause live in the bridge</span>' : `
+        <select data-pace="${esc(b.name)}">${PACES.map(([ms, label]) => `<option value="${ms}" ${b.interval_ms === ms ? 'selected' : ''}>${label}</option>`).join('')}</select>
+        <button class="pause-btn ${b.paused ? 'on' : ''}" data-pause="${esc(b.name)}" type="button">${b.paused ? '▶ Resume' : '⏸ Pause'}</button>
+        <button data-quick="eat|${esc(b.name)}" type="button">🍖</button>
+        <button data-quick="sleep_bed|${esc(b.name)}" type="button">🛏</button>`}
+      </div>
     </div>`).join('') || '<p class="hint">loading…</p>';
   box.querySelectorAll('[data-pause]').forEach((btn) => {
     btn.onclick = async () => {
@@ -265,6 +290,186 @@ function renderDash() {
       toast(r.ok ? 'pace updated' : ('failed: ' + (r.error || '?')));
     };
   });
+  box.querySelectorAll('[data-dinv]').forEach((el) => { el.onclick = () => openInventory(el.dataset.dinv); });
+  box.querySelectorAll('[data-quick]').forEach((btn) => {
+    btn.onclick = async () => {
+      const [action, bot] = btn.dataset.quick.split('|');
+      const r = await api('/api/queue', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ bot, action, args: '' }) });
+      toast(r.ok ? `queued ${action} for ${bot}` : ('failed: ' + (r.error || '?')));
+      loadState();
+    };
+  });
+  loadDashExtras();
+}
+// pause-all / resume-all / pace-all
+document.addEventListener('click', async (e) => {
+  if (e.target && e.target.id === 'pause-all') {
+    for (const b of bots) if (!b.paused && b.name !== 'HermesBot') await api('/api/pause', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: b.name, paused: true }) });
+    toast('fleet paused'); loadState().then(renderDash);
+  }
+  if (e.target && e.target.id === 'resume-all') {
+    for (const b of bots) if (b.paused) await api('/api/pause', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: b.name, paused: false }) });
+    toast('fleet resumed'); loadState().then(renderDash);
+  }
+});
+document.addEventListener('change', async (e) => {
+  if (e.target && e.target.id === 'pace-all' && e.target.value) {
+    for (const b of bots) if (b.name !== 'HermesBot') await api('/api/interval', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: b.name, interval_ms: Number(e.target.value) }) });
+    toast('fleet pace updated'); e.target.value = ''; loadState().then(renderDash);
+  }
+});
+
+// ── dashboard: server world ──
+let serverSnap = null;
+async function loadDashExtras() {
+  if (view !== 'dash') return;
+  try {
+    const [s, inv] = await Promise.all([api('/api/server'), api('/api/inventories')]);
+    if (view !== 'dash') return;
+    serverSnap = s.ok ? s : { error: s.error };
+    renderDashServer(); renderDashInv(inv.ok ? inv.inventories : null); renderDashBrain(); renderDashGive(); renderDashSettings();
+  } catch { /* retry next tick */ }
+}
+function renderDashServer() {
+  const box = $('#dash-server');
+  if (!box) return;
+  const s = serverSnap;
+  if (!s || s.error) { box.innerHTML = `<p class="hint">server admin offline: ${esc((s && s.error) || '…')}</p>`; return; }
+  box.innerHTML = `
+    <div class="srv-grid">
+      <div><b>Players online (${s.players.length}):</b> ${s.players.length ? s.players.map((p) => `<span class="chip">${esc(p)}</span>`).join(' ') : '<span class="role">just bots</span>'}</div>
+      <div><b>Time:</b> ${esc(s.timeLabel)}${s.tick != null ? ` <span class="role">(tick ${s.tick})</span>` : ''}</div>
+      <div><b>Difficulty:</b> ${esc(s.difficulty || '?')}</div>
+    </div>
+    <div class="form-row"><span><b>Set time:</b></span>
+      ${['day', 'noon', 'sunset', 'night', 'midnight'].map((t) => `<button data-adm="time|${t}" type="button">${t}</button>`).join('')}
+    </div>
+    <div class="form-row"><span><b>Weather:</b></span>
+      ${['clear', 'rain', 'thunder'].map((w) => `<button data-adm="weather|${w}" type="button">${w}</button>`).join('')}
+      <span><b>Difficulty:</b></span>
+      <select id="adm-diff">${['peaceful', 'easy', 'normal', 'hard'].map((d) => `<option ${(s.difficulty || '').toLowerCase().startsWith(d) ? 'selected' : ''}>${d}</option>`).join('')}</select>
+      <button id="adm-save" type="button">💾 save world</button>
+    </div>`;
+  box.querySelectorAll('[data-adm]').forEach((btn) => {
+    btn.onclick = async () => {
+      const [op, value] = btn.dataset.adm.split('|');
+      const r = await api('/api/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op, value }) });
+      toast(r.ok ? (op + ' → ' + (r.result || 'done')) : ('failed: ' + (r.error || '?')));
+      loadDashExtras();
+    };
+  });
+  const diff = $('#adm-diff');
+  if (diff) diff.onchange = async () => {
+    const r = await api('/api/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'difficulty', value: diff.value }) });
+    toast(r.ok ? ('difficulty → ' + diff.value) : ('failed: ' + (r.error || '?')));
+  };
+  const save = $('#adm-save');
+  if (save) save.onclick = async () => {
+    const r = await api('/api/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'save' }) });
+    toast(r.ok ? '💾 world saved' : ('failed: ' + (r.error || '?')));
+  };
+}
+
+// ── dashboard: fleet inventories ──
+function invEntries(inv) {
+  if (!inv) return [];
+  if (Array.isArray(inv.items)) return inv.items;
+  if (inv.categories) return Object.entries(inv.categories).flatMap(([cat, arr]) => arr.map((it) => ({ ...it, cat })));
+  if (Array.isArray(inv)) return inv;
+  return [];
+}
+function renderDashInv(all) {
+  const box = $('#dash-inv');
+  if (!box) return;
+  if (!all) { box.innerHTML = '<p class="hint">inventories offline</p>'; return; }
+  const filt = ($('#inv-search')?.value || '').toLowerCase();
+  box.innerHTML = `<div class="form-row"><input id="inv-search" placeholder="search items… (e.g. iron, bread)" value="${esc($('#inv-search')?.value || '')}"></div>` +
+    bots.map((b) => {
+      const items = invEntries(all[b.name]).filter((it) => !filt || (it.name || '').includes(filt));
+      const total = items.reduce((s, it) => s + (it.count || 1), 0);
+      return `<div class="inv-bot"><div class="inv-head" style="--c:${b.color}"><b>${esc(b.name)}</b>
+        <span class="role">${total} items · ${items.length} slots</span>
+        <button data-clear="${esc(b.name)}" type="button" title="empty this bot's pockets">🧹 clear</button></div>
+        <div class="inv-grid">${items.length ? items.map((it) =>
+          `<div class="inv-cell" title="${esc(it.cat || '')}">${esc((it.name || '?').replace(/_/g, ' '))}<b>x${it.count ?? 1}</b></div>`).join('')
+          : '<span class="role">empty pockets</span>'}</div></div>`;
+    }).join('');
+  const search = $('#inv-search');
+  if (search) search.oninput = () => renderDashInv(all);
+  box.querySelectorAll('[data-clear]').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!confirm(`Empty ${btn.dataset.clear}'s whole inventory?`)) return;
+      const r = await api('/api/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'clear', target: btn.dataset.clear }) });
+      toast(r.ok ? `${btn.dataset.clear} cleared` : ('failed: ' + (r.error || '?')));
+      loadDashExtras();
+    };
+  });
+}
+
+// ── dashboard: give items ──
+const COMMON_ITEMS = ['bread', 'cooked_beef', 'cooked_porkchop', 'apple', 'torch', 'iron_sword', 'iron_pickaxe', 'iron_axe', 'shield', 'bow', 'arrow', 'oak_log', 'oak_planks', 'cobblestone', 'iron_ingot', 'coal', 'diamond', 'gray_bed', 'chest', 'furnace', 'boat', 'leather_chestplate', 'bucket', 'shears', 'fishing_rod'];
+function renderDashGive() {
+  const box = $('#dash-give');
+  if (!box || box.dataset.built) return;
+  box.dataset.built = '1';
+  box.innerHTML = `<div class="form-row">
+    <select id="give-target">${['Duckets', ...bots.map((b) => b.name)].map((n) => `<option>${esc(n)}</option>`).join('')}</select>
+    <input id="give-item" list="give-items" placeholder="item (e.g. bread, iron_pickaxe)">
+    <datalist id="give-items">${COMMON_ITEMS.map((i) => `<option value="${i}">`).join('')}</datalist>
+    <input id="give-count" type="number" min="1" max="64" value="8" style="width:64px">
+    <button id="give-btn" type="button">🎁 Give</button>
+    <button id="clear-btn" type="button">🧹 Clear target</button></div>
+    <div class="role" id="give-out"></div>`;
+  $('#give-btn').onclick = async () => {
+    const r = await api('/api/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'give', target: $('#give-target').value, item: $('#give-item').value, count: Number($('#give-count').value) }) });
+    $('#give-out').textContent = r.ok ? `gave → ${r.result}` : ('failed: ' + (r.error || '?'));
+    if (r.ok) { toast('items delivered'); loadDashExtras(); }
+  };
+  $('#clear-btn').onclick = async () => {
+    if (!confirm(`Empty ${$('#give-target').value}'s inventory?`)) return;
+    const r = await api('/api/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'clear', target: $('#give-target').value }) });
+    $('#give-out').textContent = r.ok ? 'cleared' : ('failed: ' + (r.error || '?'));
+    if (r.ok) loadDashExtras();
+  };
+}
+
+// ── dashboard: brain & mission ──
+async function renderDashBrain() {
+  const box = $('#dash-brain');
+  if (!box) return;
+  try {
+    const [ctrl, goal] = await Promise.all([api('/api/state'), api('/api/goal')]);
+    const thinks = (ctrl.bots || []).reduce((s, b) => s + (b.ticks || 0), 0);
+    box.innerHTML = `<div class="srv-grid">
+      <div><b>Controller:</b> ${ctrl.controller?.ok ? '🟢 online' : '🔴 offline'} <span class="role">${esc(ctrl.controller?.lms_url || '')}</span></div>
+      <div><b>Brain:</b> ornith-1.5-9b via LM Studio <span class="role">· ${thinks} total thinks</span></div>
+      <div><b>Mission:</b> ${esc((goal.goal || '—').slice(0, 160))} <button id="goto-goal" type="button">🎯 edit</button></div>
+      <div><b>Fleet:</b> ${ctrl.bots ? ctrl.bots.filter((b) => b.online).length + '/' + ctrl.bots.length + ' online · ' + ctrl.bots.filter((b) => b.paused).length + ' paused · ' + ctrl.bots.reduce((s, b) => s + (b.queueLen || 0), 0) + ' queued tasks' : '—'}</div>
+    </div>`;
+    const g = $('#goto-goal');
+    if (g) g.onclick = () => setView('goal');
+  } catch { box.innerHTML = '<p class="hint">brain offline</p>'; }
+}
+
+// ── dashboard: interface settings ──
+function renderDashSettings() {
+  const box = $('#dash-settings');
+  if (!box || box.dataset.built) return;
+  box.dataset.built = '1';
+  box.innerHTML = `<div class="form-row"><span><b>Status refresh:</b></span>
+      <select id="set-refresh">${[3, 5, 10, 15, 30].map((s) => `<option value="${s}" ${UI.refresh === s ? 'selected' : ''}>${s}s</option>`).join('')}</select>
+      <label><input type="checkbox" id="set-overheard" ${UI.overheard ? 'checked' : ''}> show nearby chatter 👂</label>
+      <label><input type="checkbox" id="set-toasts" ${UI.toasts ? 'checked' : ''}> popups</label></div>
+    <div class="form-row"><span><b>Chat history:</b></span>
+      <select id="set-chatn">${[20, 60, 100].map((n) => `<option value="${n}" ${UI.chatN === n ? 'selected' : ''}>${n}</option>`).join('')}</select>
+      <span><b>Map area:</b></span>
+      <select id="set-mapmin">${[[160, 'village'], [256, 'wide'], [384, 'region']].map(([v, label]) => `<option value="${v}" ${UI.mapMin === v ? 'selected' : ''}>${label}</option>`).join('')}</select>
+      <span class="role">dashboard extras auto-refresh every 20s</span></div>`;
+  $('#set-refresh').onchange = (e) => { UI.refresh = Number(e.target.value); saveUI(); toast('refresh → ' + UI.refresh + 's'); };
+  $('#set-overheard').onchange = (e) => { UI.overheard = e.target.checked; saveUI(); loadChat(); };
+  $('#set-toasts').onchange = (e) => { UI.toasts = e.target.checked; saveUI(); };
+  $('#set-chatn').onchange = (e) => { UI.chatN = Number(e.target.value); saveUI(); loadChat(); };
+  $('#set-mapmin').onchange = (e) => { UI.mapMin = Number(e.target.value); saveUI(); terrainCache = null; if (view === 'map') drawMap(); };
 }
 document.querySelectorAll('#care-btns button').forEach((btn) => {
   btn.onclick = async () => {
@@ -314,7 +519,7 @@ async function drawMap() {
   bots.forEach((b) => { if (b.pos) { xs.push(b.pos[0]); zs.push(b.pos[2]); } });
   const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
   const cz = (Math.min(...zs) + Math.max(...zs)) / 2;
-  const size = Math.max(160, Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs)) + 60);
+  const size = Math.max(UI.mapMin || 160, Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs)) + 60);
   const key = `${Math.round(cx / 8) * 8},${Math.round(cz / 8) * 8},${Math.round(size / 16) * 16}`;
   if (!terrainCache || terrainCache.key !== key) {
     ctx.fillStyle = '#101114'; ctx.fillRect(0, 0, W, W);
@@ -428,18 +633,29 @@ async function openInventory(name) {
   $('#inv-modal').classList.add('open');
   try {
     const r = await api(`/api/bot/${name}/inventory`);
-    const items = r.data?.items || r.data?.inventory || r.data || [];
-    const rows = Array.isArray(items) ? items : Object.entries(items).map(([n, c]) => ({ name: n, count: c }));
-    $('#inv-list').innerHTML = rows.length
-      ? rows.map((it) => `<div class="inv-row"><span>${esc(it.name || it.item || '?')}</span><b>x${it.count ?? 1}</b></div>`).join('')
+    const items = invEntries(r.data);
+    $('#inv-list').innerHTML = items.length
+      ? items.map((it) => `<div class="inv-row"><span>${esc(((it.name || it.item || '?') + '').replace(/_/g, ' '))}${it.cat ? ` <span class="role">${esc(it.cat)}</span>` : ''}</span><b>x${it.count ?? 1}</b></div>`).join('')
       : 'empty pockets';
   } catch { $('#inv-list').textContent = 'offline'; }
 }
 
 // ── loops ──
+let timers = [];
+function armTimers() {
+  timers.forEach(clearInterval); timers = [];
+  timers.push(setInterval(loadChat, 3000));
+  timers.push(setInterval(loadState, (UI.refresh || 5) * 1000));
+  timers.push(setInterval(() => { if (careBot) loadQueue(); }, 5000));
+  timers.push(setInterval(() => { if (view === 'team') loadTeam(); }, 4000));
+  timers.push(setInterval(() => { if (view === 'map') drawMap(); }, 5000));
+  timers.push(setInterval(() => { if (view === 'dash') loadDashExtras(); }, 20000));
+  timers.push(setInterval(checkAlerts, 15000));
+}
 setView('global');
 loadState();
 loadQueueActions();
+armTimers();
 document.addEventListener('click', async (e) => {
   if (e.target && e.target.id === 'inv-close') $('#inv-modal').classList.remove('open');
   if (e.target && e.target.id === 'inv-modal') $('#inv-modal').classList.remove('open');
@@ -461,10 +677,4 @@ document.addEventListener('click', async (e) => {
     else toast('queue failed: ' + (r.error || '?'));
   }
 });
-setInterval(loadChat, 3000);
-setInterval(loadState, 5000);
-setInterval(() => { if (careBot) loadQueue(); }, 5000);
-setInterval(() => { if (view === 'team') loadTeam(); }, 4000);
-setInterval(() => { if (view === 'map') drawMap(); }, 5000);
-setInterval(checkAlerts, 15000);
 document.addEventListener('input', (e) => { if (e.target && e.target.id === 'chat-filter' && (view === 'global' || view === 'team')) { $('#messages').innerHTML = ''; rendered.clear(); teamSeen.clear(); loadChat(); loadTeam(); } });

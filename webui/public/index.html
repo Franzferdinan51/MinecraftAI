@@ -54,10 +54,31 @@
       </div>
     </div>
     <div id="dash-pane">
-      <div class="panel">
-        <h2>⚙ Dashboard</h2>
-        <p class="hint">Pause bots, set how often each one thinks. Changes apply instantly, no restart.</p>
+      <div class="panel wide">
+        <h2>⚙ Fleet vitals</h2>
+        <p class="hint">Pause bots, set think pace, quick-queue survival tasks. <button id="pause-all" type="button">⏸ all</button> <button id="resume-all" type="button">▶ all</button> <label>pace all <select id="pace-all"><option value="">—</option><option value="30000">30s</option><option value="60000">60s</option><option value="90000">90s</option><option value="180000">3m</option></select></label></p>
         <div id="dash-rows"></div>
+      </div>
+      <div class="panel wide">
+        <h2>🌍 Server world</h2>
+        <div id="dash-server"><p class="hint">loading…</p></div>
+      </div>
+      <div class="panel wide">
+        <h2>🎒 Fleet inventories</h2>
+        <div id="dash-inv"><p class="hint">loading…</p></div>
+      </div>
+      <div class="panel wide">
+        <h2>🎁 Give items</h2>
+        <p class="hint">Spawn items into anyone's pockets via the server (logged in chat).</p>
+        <div id="dash-give"></div>
+      </div>
+      <div class="panel wide">
+        <h2>🧠 Brain &amp; mission</h2>
+        <div id="dash-brain"><p class="hint">loading…</p></div>
+      </div>
+      <div class="panel wide">
+        <h2>🔧 Interface settings</h2>
+        <div id="dash-settings"></div>
       </div>
     </div>
     <form id="composer"><input id="input" autocomplete="off" placeholder="Message #global-chat — bots hear you like in-game chat"><button type="submit">Send</button></form>
@@ -89,6 +110,6 @@
 </div>
 <div id="toast"></div>
 <div id="inv-modal"><div id="inv-box"><h3 id="inv-title">🎒</h3><div id="inv-list"></div><button id="inv-close" type="button">Close</button></div></div>
-<script src="/app.js?v=3"></script>
+<script src="/app.js?v=4"></script>
 </body>
 </html>
