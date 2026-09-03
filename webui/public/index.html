@@ -22,7 +22,10 @@
     <div class="chan-group">DIRECT MESSAGES</div>
     <div id="dm-list"></div>
     <div class="chan-group">VILLAGE</div>
+    <div class="chan" data-view="goal"><span class="hash">🎯</span>village-goal</div>
+    <div class="chan" data-view="ask"><span class="hash">🤖</span>ask-ai</div>
     <div class="chan" data-view="status"><span class="hash">#</span>bot-status</div>
+    <div class="chan" data-view="dash"><span class="hash">⚙</span>dashboard</div>
     <div id="me"><div class="avatar" style="--c:#faa81a">D</div><div><b>Duckets</b><span>commander</span></div></div>
   </aside>
   <!-- main -->
@@ -30,6 +33,23 @@
     <header id="chan-head"><span class="hash">#</span><b id="chan-name">global-chat</b><span id="chan-topic">everything said in the world, live</span></header>
     <div id="messages"></div>
     <div id="status-cards"></div>
+    <div id="goal-pane">
+      <div class="panel">
+        <h2>🎯 Village goal</h2>
+        <p class="hint">Every bot reads this as its MISSION each think. Change it and the whole village pivots within a minute.</p>
+        <div id="goal-current"></div>
+        <textarea id="goal-input" rows="3" placeholder="e.g. Build a wheat farm east of the house and store bread in the chest"></textarea>
+        <div id="goal-presets"></div>
+        <button id="goal-save">Set goal</button>
+      </div>
+    </div>
+    <div id="dash-pane">
+      <div class="panel">
+        <h2>⚙ Dashboard</h2>
+        <p class="hint">Pause bots, set how often each one thinks. Changes apply instantly, no restart.</p>
+        <div id="dash-rows"></div>
+      </div>
+    </div>
     <form id="composer"><input id="input" autocomplete="off" placeholder="Message #global-chat — bots hear you like in-game chat"><button type="submit">Send</button></form>
   </main>
   <!-- members -->

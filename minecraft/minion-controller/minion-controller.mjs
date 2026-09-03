@@ -122,9 +122,18 @@ function plainDoing(minion, statusJson, lastAction = '') {
   return 'working on the village';
 }
 
+// ── Village goal (set live from Mission Control; the prompt reads it every tick) ──
+let villageGoal = 'Build a safe starter village with the other players.';
+const pausedBots = new Set();
+function setVillageGoal(goal, author = 'Duckets (web)') {
+  villageGoal = String(goal).slice(0, 800);
+  rememberTeamChat('PLAN', `New village goal set by ${author}: ${villageGoal} — make your next actions advance it.`);
+  return villageGoal;
+}
+
 const PROMPT_TMPL = (name, role = 'village resident') => `You are ${name}, the ${role}, an AI player in a Minecraft world.
 
-MISSION: Build a safe starter village with the other players. Follow this loop forever: assess threats and health; answer human and team chat; scout a safe flat site; gather the resources your role needs; craft useful tools, food, torches and building materials; construct a small house, farm, path, storage area or defenses; light the area; report exactly what you did; then choose the next task. Never stand still just because the scene is unfamiliar.
+MISSION: ${villageGoal} Follow this loop forever: assess threats and health; answer human and team chat; scout a safe flat site; gather the resources your role needs; craft useful tools, food, torches and building materials; construct a small house, farm, path, storage area or defenses; light the area; report exactly what you did; then choose the next task. Never stand still just because the scene is unfamiliar.
 
 DETAILED GAMEPLAY: Minecraft is a survival game. Look around, move deliberately, collect drops, use crafting recipes, make tools before mining, eat when hungry, avoid falls and hostile mobs, sleep or shelter at night, and return to the village area after scouting. Builders gather logs, convert logs to planks, and place walls/floors/roofs. Farmers gather grass/seeds and food, plant and harvest crops, and share food. Miners gather stone, coal, iron and useful ores and report locations. Scouts check terrain and danger, escort teammates, light paths, and defend the village. Claim tasks in chat so two bots do not duplicate work. Use only materials you possess and never grief existing player builds.
 
@@ -198,7 +207,7 @@ Rules:
 1. SURVIVAL OVERRIDES EVERYTHING: if a hostile mob is close, fight it when healthy and equipped, otherwise flee; if health is low, eat or flee to safety; never continue gathering while being attacked.
 2. PROTECT PLAYER BUILDS — fences, walls, paths, crops, chests, doors, torches, and decorations that any player placed are theirs. Do NOT dig, break, or replace them. ENTER THROUGH DOORS AND GATES ONLY: never break a wall, fence, or door to get inside — use mc door on closed doors, then walk through and close it. Do not walk through fences or crops. Stay at your yard spot outside the house unless the player invites you in. Never run \`mc dig\` or \`mc collect\` within 8 blocks of the house (50,63,85). Breaking into a build is the worst thing you can do; a teammate who does it must repair the damage immediately with matching blocks.
 3. Treat every \`Human request to NAME ...\` / \`Human question to ALL ...\` message in TEAM CHAT as a shared team plan. If NAME is you (or ALL), acknowledge it in chat and make your next physical action advance that request; if another teammate is named, choose a supporting task and report what you can contribute.
-4. The village mission has priority. Do not choose \`NONE\` or an observation command as your turn; take a movement, gathering, crafting, building, defense, food, or communication action.
+4. The mission above has priority. Do not choose \`NONE\` or an observation command as your turn; take a movement, gathering, crafting, building, defense, food, or communication action.
 5. Communication is required at least every second turn: claim tasks, report discoveries/resources, request supplies, warn of danger, and report completed work. If a human names one specific player, only that player answers and acts — everyone else stays silent and keeps working. To find a player you cannot see, walk to their KNOWN PLAYER POSITION coords with mc goto_near, then mc follow <name> once close.
 6. Follow the gameplay loop: observe once, decide, act, verify the result, then continue. Never loop observations or stand still.
 7. Be brief. THINK in one sentence, ACT in one line.
@@ -597,6 +606,7 @@ async function runMinionAction(entry, args, apiUrl) {
 async function tick(minion) {
   const entry = state.get(minion.name);
   if (entry.pending) return;
+  if (pausedBots.has(minion.name)) { entry.last_action = 'paused from Mission Control — standing by'; return; }
   entry.pending = true;
   try {
     const apiUrl = minion.api_url || DEFAULT_MC_API;
@@ -763,6 +773,7 @@ async function tick(minion) {
 async function backgroundWork(minion) {
   const entry = state.get(minion.name);
   if (!shouldRunBackgroundWork(entry)) return;
+  if (pausedBots.has(minion.name)) return;
   entry.activity_pending = true;
   try {
     const apiUrl = minion.api_url || DEFAULT_MC_API;
@@ -791,6 +802,47 @@ for (const m of minions) {
 }
 
 const server = http.createServer((req, res) => {
+  const readJsonBody = (limit = 4000) => new Promise((resolve, reject) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; if (raw.length > limit) req.destroy(); });
+    req.on('end', () => { try { resolve(JSON.parse(raw || '{}')); } catch (e) { reject(new Error('bad json')); } });
+  });
+  const send = (code, obj) => {
+    res.writeHead(code, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(obj));
+  };
+  // Village goal: GET returns it, POST sets it live (prompt reads it every tick).
+  if (req.url === '/goal') {
+    if (req.method === 'GET') return send(200, { ok: true, goal: villageGoal });
+    if (req.method === 'POST') {
+      readJsonBody().then((body) => {
+        if (!body.goal || String(body.goal).trim().length < 10) return send(400, { ok: false, error: 'goal too short (min 10 chars)' });
+        send(200, { ok: true, goal: setVillageGoal(body.goal, body.from || 'Duckets (web)') });
+      }).catch((e) => send(400, { ok: false, error: e.message }));
+      return;
+    }
+  }
+  // Pause/resume one bot: POST /pause {"name":"Moss","paused":true}
+  if (req.method === 'POST' && req.url === '/pause') {
+    readJsonBody().then((body) => {
+      if (!minions.some((m) => m.name === body.name)) return send(400, { ok: false, error: 'unknown bot' });
+      if (body.paused) { pausedBots.add(body.name); rememberTeamChat('PLAN', `${body.name} paused from Mission Control — standing by.`); }
+      else { pausedBots.delete(body.name); rememberTeamChat('PLAN', `${body.name} resumed — back to the mission.`); }
+      send(200, { ok: true, name: body.name, paused: pausedBots.has(body.name) });
+    }).catch((e) => send(400, { ok: false, error: e.message }));
+    return;
+  }
+  // Think pace: POST /interval {"name":"Moss","interval_ms":60000} (10s–300s)
+  if (req.method === 'POST' && req.url === '/interval') {
+    readJsonBody().then((body) => {
+      const m = minions.find((x) => x.name === body.name);
+      if (!m) return send(400, { ok: false, error: 'unknown bot' });
+      const ms = Math.max(10000, Math.min(300000, Number(body.interval_ms) || m.interval_ms));
+      m.interval_ms = ms;
+      send(200, { ok: true, name: m.name, interval_ms: ms });
+    }).catch((e) => send(400, { ok: false, error: e.message }));
+    return;
+  }
   // Mission-control injection: POST /say {"from":"Duckets (web)","message":"...","target":"Steve"}
   if (req.method === 'POST' && req.url === '/say') {
     let raw = '';
@@ -816,10 +868,15 @@ const server = http.createServer((req, res) => {
     const body = {
       ok: true,
       lms_url: LMS_URL,
+      goal: villageGoal,
+      paused: [...pausedBots],
       minion_count: minions.length,
       minions: Array.from(state.entries()).map(([name, e]) => ({
         name,
         model: minions.find((m) => m.name === name).model,
+        role: minions.find((m) => m.name === name).role || '',
+        interval_ms: minions.find((m) => m.name === name).interval_ms,
+        paused: pausedBots.has(name),
         ticks: e.ticks,
         pending: e.pending,
         last_action: e.last_action,

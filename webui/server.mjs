@@ -67,15 +67,20 @@ const server = http.createServer(async (req, res) => {
 
   // ── state: one snapshot for the whole village ──
   if (req.method === 'GET' && url.pathname === '/api/state') {
+    const ctrl = await botFetch(3003, '/health');
+    const ctrlByName = Object.fromEntries((ctrl.minions || []).map((m) => [m.name, m]));
     const bots = await Promise.all(BOTS.map(async (b) => {
       const [st, task] = await Promise.all([
         botFetch(b.port, '/status'),
         botFetch(b.port, '/task'),
       ]);
       const d = st.data || {};
+      const c = ctrlByName[b.name] || {};
       return {
-        name: b.name, role: b.role, color: b.color, port: b.port,
+        name: b.name, role: c.role || b.role, color: b.color, port: b.port,
         online: st.ok === true,
+        paused: !!c.paused, interval_ms: c.interval_ms || null, ticks: c.ticks ?? null,
+        last_action: (c.last_action || '').slice(0, 160),
         health: d.health ?? null, food: d.food ?? null,
         pos: d.position ? [Math.floor(d.position.x), Math.floor(d.position.y), Math.floor(d.position.z)] : null,
         holding: d.holding?.name || 'empty',
@@ -85,8 +90,7 @@ const server = http.createServer(async (req, res) => {
         error: st.ok ? null : (st.error || 'offline'),
       };
     }));
-    const ctrl = await botFetch(3003, '/health');
-    return json(res, 200, { ok: true, bots, controller: ctrl.ok ? ctrl : { ok: false } });
+    return json(res, 200, { ok: true, bots, goal: ctrl.goal || null, controller: ctrl.ok ? { ok: true, lms_url: ctrl.lms_url } : { ok: false } });
   }
 
   // ── chat: server-wide messages + overheard bot chatter + our web echoes ──
@@ -105,7 +109,49 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, messages: msgs });
   }
 
-  // ── say: talk to bots (all or DM one) — same flow as in-game chat ──
+  // ── goal / pause / pace: forwarded to the controller ──
+  if (url.pathname === '/api/goal') {
+    if (req.method === 'GET') return json(res, 200, await botFetch(3003, '/goal'));
+    try {
+      const body = await readBody(req);
+      return json(res, 200, await botFetch(3003, '/goal', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ goal: body.goal, from: 'Duckets (web)' }),
+      }));
+    } catch { return json(res, 400, { ok: false, error: 'bad json' }); }
+  }
+  if (req.method === 'POST' && (url.pathname === '/api/pause' || url.pathname === '/api/interval')) {
+    try {
+      const body = await readBody(req);
+      const target = url.pathname === '/api/pause' ? '/pause' : '/interval';
+      return json(res, 200, await botFetch(3003, target, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      }));
+    } catch { return json(res, 400, { ok: false, error: 'bad json' }); }
+  }
+  // ── ask: chat directly with the village AI (Ornith, live village context) ──
+  if (req.method === 'POST' && url.pathname === '/api/ask') {
+    try {
+      const body = await readBody(req);
+      const question = String(body.message || '').slice(0, 1000);
+      if (!question.trim()) return json(res, 400, { ok: false, error: 'missing message' });
+      // Build live context: goal + each bot's condition + recent chat.
+      const [ctrl, pub] = await Promise.all([botFetch(3003, '/health'), botFetch(3001, '/chat?count=12')]);
+      const botLines = (ctrl.minions || []).map((m) =>
+        `- ${m.name} (${m.role || m.model}): ${m.paused ? 'PAUSED' : 'active'}, ticks=${m.ticks}, last: ${(m.last_action || '?').slice(0, 140)}`).join('\n');
+      const chatLines = (pub.data?.messages || []).slice(-12).map((m) => `<${m.from}> ${m.message}`).join('\n');
+      const system = `You are the village overseer AI for a Minecraft world called hermescraft, speaking to the player Duckets in a Discord-like dashboard. Be short, warm, and concrete — no robotic status dumps.\nCurrent village goal: ${ctrl.goal || 'build a safe starter village'}.\nBots right now:\n${botLines || '(controller offline)'}\nRecent in-game chat:\n${chatLines || '(quiet)'}\nAnswer questions about the village, explain what bots are doing and why, and suggest commands the player can give (they can set the village goal, DM a bot, or ask for eat/sleep/yard). If asked to DO something, say what you'll pass along in one line — the dashboard handles actions separately.`;
+      const r = await fetch('http://127.0.0.1:1234/v1/chat/completions', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model: 'ornith-1.5-9b', messages: [{ role: 'system', content: system }, { role: 'user', content: question }], max_tokens: 400, temperature: 0.7 }),
+        signal: AbortSignal.timeout(90000),
+      });
+      const data = await r.json().catch(() => ({}));
+      let text = data.choices?.[0]?.message?.content?.trim() || data.choices?.[0]?.message?.reasoning_content?.trim() || '';
+      if (!text) return json(res, 502, { ok: false, error: 'empty answer from model' });
+      return json(res, 200, { ok: true, reply: text.slice(0, 2000) });
+    } catch (e) { return json(res, 502, { ok: false, error: 'AI unreachable: ' + String(e.message || e).slice(0, 120) }); }
+  }
   if (req.method === 'POST' && url.pathname === '/api/say') {
     try {
       const body = await readBody(req);
