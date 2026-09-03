@@ -64,9 +64,11 @@ const handledHumanChat = new Map();
 // render distance, so no single bot can track you alone).
 const playerSightings = new Map();
 // Anti-spam: public chat is team-shared and rate-limited. Whispers are always
-// allowed; public barks require per-bot + team cooldowns.
+// allowed; public barks require per-bot + team cooldowns. Direct REPLIES to a
+// human bypass cooldowns (first claimer wins) — answering a person is never spam.
 const lastPublicChatByBot = new Map();
 let lastTeamPublicChat = 0;
+const publicReplyClaimed = new Set();
 function canPublicChat(botName, botCooldownMs = 120000, teamCooldownMs = 15000) {
   const now = Date.now();
   if (now - lastTeamPublicChat < teamCooldownMs) return false;
@@ -77,6 +79,29 @@ function markPublicChat(botName) {
   const now = Date.now();
   lastPublicChatByBot.set(botName, now);
   lastTeamPublicChat = now;
+}
+// Returns true only for the first bot to answer this human message publicly.
+function claimPublicReply(from, message) {
+  const key = `reply:${from}:${message}`;
+  if (publicReplyClaimed.has(key)) return false;
+  publicReplyClaimed.add(key);
+  if (publicReplyClaimed.size > 100) publicReplyClaimed.delete(publicReplyClaimed.keys().next().value);
+  return true;
+}
+// Plain-words activity for chat — never the robotic status line.
+function plainDoing(minion, statusJson, lastAction = '') {
+  let d = {};
+  try { d = JSON.parse(statusJson).data || {}; } catch {}
+  const act = (lastAction || '').split('->')[0].replace(/^(background work \||queued inference \||human request \||rejected:)\s*/, '').trim();
+  if (/sleep/i.test(act)) return 'getting some sleep';
+  if (/goto|follow|walk|heading/i.test(act)) return 'on my way over';
+  if (/collect|mine|dig|harvest/i.test(act)) return 'out gathering';
+  if (/craft|smelt|cook|build|place/i.test(act)) return 'making stuff at the village';
+  if (/fight|flee|attack/i.test(act)) return 'dealing with a mob';
+  if (/fish/i.test(act)) return 'out fishing';
+  if (/till|sow|breed|shear|milk|farm/i.test(act)) return 'working the farm';
+  if (/eat/i.test(act)) return 'grabbing a bite';
+  return 'working on the village';
 }
 
 const PROMPT_TMPL = (name, role = 'village resident') => `You are ${name}, the ${role}, an AI player in a Minecraft world.
@@ -158,7 +183,8 @@ Rules:
 4. The village mission has priority. Do not choose \`NONE\` or an observation command as your turn; take a movement, gathering, crafting, building, defense, food, or communication action.
 5. Communication is required at least every second turn: claim tasks, report discoveries/resources, request supplies, warn of danger, and report completed work. If a human names one specific player, only that player answers and acts — everyone else stays silent and keeps working. To find a player you cannot see, walk to their KNOWN PLAYER POSITION coords with mc goto_near, then mc follow <name> once close.
 6. Follow the gameplay loop: observe once, decide, act, verify the result, then continue. Never loop observations or stand still.
-7. Be brief. THINK in one sentence, ACT in one line.`;
+7. Be brief. THINK in one sentence, ACT in one line.
+8. Talk like a person, not a status report. When you use mc chat, write what a friendly player would actually type: short, warm, specific ("got it, bringing wood!", "careful, creeper by the farm"). Never emit robotic lines like "on it — NAME (role) at X holding Y". Vary your words; never repeat the same line twice in a row.`;
 
 function callMc(args, apiUrl = DEFAULT_MC_API) {
   return new Promise((resolve, reject) => {
@@ -580,10 +606,11 @@ async function tick(minion) {
       rememberTeamChat('PLAN', teamRequest);
       const directAction = directRequestAction(human.message, human.from);
       if (directAction) {
-        // Whisper the ack to avoid 5x public spam; one public note only if cooldown allows.
-        const reply = `${minion.name}: Executing your request now: ${directAction.replace(/^mc /, '')}.`;
+        // Say it OUT LOUD (first claimer; replies bypass cooldowns) + whisper.
+        const doing = plainDoing(minion, status, directAction);
+        const reply = `${minion.name}: ${doing} — on it!`;
         try { await callMc(['chat_to', human.from, reply], apiUrl); rememberTeamChat(minion.name, `to ${human.from}: ${reply}`); } catch {}
-        if (canPublicChat(minion.name)) {
+        if (claimPublicReply(human.from, human.message)) {
           try { await callMc(['chat', reply], apiUrl); rememberTeamChat(minion.name, reply); markPublicChat(minion.name); } catch {}
         }
         try {
@@ -615,15 +642,19 @@ async function tick(minion) {
         try { await callMc(['chat_to', human.from, stock], apiUrl); rememberTeamChat(minion.name, `to ${human.from}: ${stock}`); } catch {}
         entry.last_action = `human request | inventory whisper -> ${stock.slice(0, 160)}`;
       } else {
-        // Guaranteed whisper ack (no cooldown): the player always hears back.
-        // Public notes stay cooldown-gated to avoid 5x spam.
-        const doing = progressSummary(minion, status, entry.last_action);
+        // Guaranteed answer, in plain words. First claimer says it OUT LOUD
+        // (replies bypass cooldowns); everyone else whispers so nothing echoes.
+        const doing = plainDoing(minion, status, entry.last_action);
         const ack = `${minion.name}: heard you — ${doing}.`;
         try { await callMc(['chat_to', human.from, ack], apiUrl); rememberTeamChat(minion.name, `to ${human.from}: ${ack}`); } catch {}
         entry.last_action = `human request | whisper ack -> ${ack.slice(0, 160)}`;
+        if (claimPublicReply(human.from, human.message)) {
+          try { await callMc(['chat', ack], apiUrl); rememberTeamChat(minion.name, ack); markPublicChat(minion.name); } catch {}
+        }
         // One public progress note per team per 15s, per bot per 120s. Otherwise stay silent and work.
-        if (canPublicChat(minion.name)) {
-          const reply = `${minion.name}: on it — ${doing}.`;
+        else if (canPublicChat(minion.name)) {
+          const summary = progressSummary(minion, status, entry.last_action);
+          const reply = `${minion.name}: on it — ${summary}.`;
           try { await callMc(['chat', reply], apiUrl); rememberTeamChat(minion.name, reply); markPublicChat(minion.name); } catch {}
         }
       }

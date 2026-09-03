@@ -375,4 +375,13 @@ assert.equal(
   'a failed follow must walk to the last player sighting instead of giving up',
 );
 
+// Natural talk: first claimer answers publicly; plain-words doing lines.
+const claimPublicReply = loadFunction('claimPublicReply', 'const publicReplyClaimed = new Set();');
+assert.equal(claimPublicReply('Duckets', 'hello'), true, 'first claimer wins the public reply');
+assert.equal(claimPublicReply('Duckets', 'hello'), false, 'second claimer stays quiet — no echo');
+const plainDoing = loadFunction('plainDoing');
+assert.equal(plainDoing({ name: 'Steve' }, '{}', 'mc follow Duckets -> ok'), 'on my way over');
+assert.equal(plainDoing({ name: 'Moss' }, '{}', 'mc sleep -> ok'), 'getting some sleep');
+assert.ok(!plainDoing({ name: 'Reed' }, '{}', 'whatever').includes('('), 'doing line must not be a robotic status report');
+
 console.log('minion-controller regression tests: PASS');
