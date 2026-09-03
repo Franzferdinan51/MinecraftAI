@@ -240,7 +240,7 @@ function parseCommand(line) {
   return tokens;
 }
 
-function survivalAction(statusJson) {
+function survivalAction(statusJson, lastAction = '') {
   let d = {};
   try { d = JSON.parse(statusJson).data || {}; } catch {}
   const hostile = (d.nearbyEntities || []).find((e) => e.kind === 'hostile');
@@ -249,7 +249,10 @@ function survivalAction(statusJson) {
   if ((d.health || 0) < 10 && food) return 'mc eat';
   if (hostile && hostile.distance <= 18) return (d.health || 0) >= 14 ? `mc fight ${hostile.type}` : 'mc flee 20';
   // At night with no threat near home, sleep to set spawn (beds at the house).
-  if (d.isDay === false && !hostile && d.position && typeof nearHouse === 'function' && nearHouse(d.position, 20)) return 'mc sleep';
+  // Two-step: a failed sleep means no bed in reach, so walk to the bed row first.
+  if (d.isDay === false && !hostile && d.position && typeof nearHouse === 'function' && nearHouse(d.position, 20)) {
+    return /No bed within 4 blocks/.test(lastAction || '') ? 'mc goto_near 50 63 77' : 'mc sleep';
+  }
   return '';
 }
 
@@ -286,6 +289,7 @@ function directRequestAction(message, sender) {
     return `mc goto_near ${Math.floor(Number(coords[1]))} ${Math.floor(Number(coords[2]))} ${Math.floor(Number(coords[3]))}`;
   }
   if (/\bfollow me\b/.test(text)) return `mc follow ${sender}`;
+  if (/\bcome (with|to|here)\b/.test(text)) return `mc follow ${sender}`;
   if (/\b(run|flee|retreat)\b/.test(text)) return 'mc flee 20';
   if (/\b(make|craft)\b.*\bsword\b|\bsword\b/.test(text)) return 'mc craft wooden_sword';
   if (/\b(bed|respawn|sleep|set (your |their |his |her )?spawn)\b/.test(text)) return 'mc sleep';
@@ -508,6 +512,16 @@ function queuedFallbackAction(minion, statusJson, lastAction, tick, queueDepth) 
 }
 
 function recoveryAfterFailedAction(minion, statusJson, attemptedAction, errorMessage, tick) {
+  // Follow fails when the player is out of entity range (unloaded). Walk to
+  // their last shared-eyes sighting first, then follow once close.
+  const followMatch = (attemptedAction || '').match(/^mc follow (.+)/);
+  if (followMatch && /not found nearby/i.test(errorMessage || '')) {
+    const sighting = playerSightings.get(followMatch[1].trim());
+    if (sighting && Date.now() - sighting.at <= 300000) {
+      return `mc bg_goto ${sighting.x} ${sighting.y} ${sighting.z}`;
+    }
+    return '';
+  }
   if (!/^mc collect\b/.test(attemptedAction) || !/can't see|not visible/i.test(errorMessage)) return '';
   return fallbackAction(minion, statusJson, errorMessage, tick);
 }
@@ -578,6 +592,18 @@ async function tick(minion) {
           entry.last_action = `human request | ${directAction} -> ${out.slice(0, 160)}`;
         } catch (err) {
           entry.last_action = `human request | ${directAction} -> ERROR ${err.message}`;
+          // Follow-failover: player out of range → walk to last sighting instead.
+          const failover = recoveryAfterFailedAction(minion, status, directAction, err.message, entry.ticks);
+          if (failover) {
+            try {
+              const out = await runMinionAction(entry, parseCommand(failover).slice(1), apiUrl);
+              entry.ticks += 1;
+              entry.last_action = `human request | ${directAction} -> ERROR ${err.message} | failover ${failover} -> ${out.slice(0, 120)}`;
+              const coming = `${minion.name}: Can't see you from here — heading to where you were last spotted.`;
+              try { await callMc(['chat_to', human.from, coming], apiUrl); } catch {}
+              return;
+            } catch {}
+          }
           const failure = `${minion.name}: I tried that, but ${err.message.slice(0, 100)}.`;
           try { await callMc(['chat_to', human.from, failure], apiUrl); } catch {}
         }
@@ -589,15 +615,20 @@ async function tick(minion) {
         try { await callMc(['chat_to', human.from, stock], apiUrl); rememberTeamChat(minion.name, `to ${human.from}: ${stock}`); } catch {}
         entry.last_action = `human request | inventory whisper -> ${stock.slice(0, 160)}`;
       } else {
+        // Guaranteed whisper ack (no cooldown): the player always hears back.
+        // Public notes stay cooldown-gated to avoid 5x spam.
+        const doing = progressSummary(minion, status, entry.last_action);
+        const ack = `${minion.name}: heard you — ${doing}.`;
+        try { await callMc(['chat_to', human.from, ack], apiUrl); rememberTeamChat(minion.name, `to ${human.from}: ${ack}`); } catch {}
+        entry.last_action = `human request | whisper ack -> ${ack.slice(0, 160)}`;
         // One public progress note per team per 15s, per bot per 120s. Otherwise stay silent and work.
         if (canPublicChat(minion.name)) {
-          const doing = progressSummary(minion, status, entry.last_action);
           const reply = `${minion.name}: on it — ${doing}.`;
           try { await callMc(['chat', reply], apiUrl); rememberTeamChat(minion.name, reply); markPublicChat(minion.name); } catch {}
         }
       }
     }
-    const urgent = survivalAction(status);
+    const urgent = survivalAction(status, entry.last_action);
     if (urgent) {
       try {
         const out = await runMinionAction(entry, parseCommand(urgent).slice(1), apiUrl);

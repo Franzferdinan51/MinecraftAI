@@ -340,4 +340,39 @@ for (const needle of ['async till(', 'async sow(', 'async harvest(', 'async bree
   assert.ok(botSource.includes(needle), `bot server must implement ${needle}`);
 }
 
+// Chat responsiveness: night sleep must walk to beds after failing; "come with
+// me" must follow; failed follows must walk to the last player sighting.
+const nightStatus = JSON.stringify({
+  data: { health: 20, food: 20, inventory: [], nearbyEntities: [], isDay: false, position: { x: 50, y: 63, z: 85 } },
+});
+const survivalNearHouse = loadFunction('survivalAction', houseHelpers);
+assert.equal(
+  survivalNearHouse(nightStatus, ''),
+  'mc sleep',
+  'first night tick near home must sleep',
+);
+assert.equal(
+  survivalNearHouse(nightStatus, 'mc sleep -> ERROR mc exit 1: ERROR: No bed within 4 blocks. | priority survival'),
+  'mc goto_near 50 63 77',
+  'a failed sleep must walk to the bed row instead of failing forever',
+);
+assert.equal(
+  directRequestAction('come with me', 'Duckets'),
+  'mc follow Duckets',
+  '"come with me" must follow the speaker',
+);
+const sightingDeps = `const playerSightings = new Map([['Duckets', { x: 60, y: 64, z: 80, by: 'Steve', at: Date.now() }]]);\n${houseHelpers}${furnaceDep}\nconst fallbackAction = ${fallbackAction.toString()};`;
+const recoveryWithSightings = loadFunction('recoveryAfterFailedAction', sightingDeps);
+assert.equal(
+  recoveryWithSightings(
+    { name: 'Steve' },
+    nightStatus,
+    'mc follow Duckets',
+    'mc exit 1: ERROR: Player/entity "Duckets" not found nearby.',
+    5,
+  ),
+  'mc bg_goto 60 64 80',
+  'a failed follow must walk to the last player sighting instead of giving up',
+);
+
 console.log('minion-controller regression tests: PASS');
