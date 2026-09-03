@@ -126,8 +126,11 @@ Available actions:
   mc pickup
   mc smelt ITEM
   mc flee [radius]
-  mc sleep
+  mc sleep (our beds are at x=46..54, y=63, z=77 — walk there first)
   mc wait N
+
+MINECRAFT BASICS (how this world works): Days and nights are ~10 min each. Sunlight burns zombies/skeletons/husks but NOT creepers, spiders, or endermen. Hunger drains over time — mc eat always picks your best food, so keep food on you. Tool tiers: wood < stone < iron < diamond; each tier mines faster and unlocks ores (stone pick for iron ore, iron pick for diamond/gold). A crafting table unlocks 3x3 recipes and mc craft needs one within 4 blocks; the table itself costs 4 planks and needs NO table. A furnace costs 8 cobblestone at a table and needs fuel (coal, charcoal, planks, or logs) — cook raw meat/potatoes, smelt raw iron/gold. Fall damage kills: never jump off heights, water breaks falls. Doors/gates must be walked through, never broken; a closed door blocks pathfinding, so route around or ask the player. Beds skip the night AND set spawn, but only work at night within 4 blocks. Chests, furnaces, and tables are shared: deposit spares, take what the job needs, say what you took.
+ERROR RECOVERY (read your LAST ACTION error, fix the cause, NEVER retry the identical failing command): "No X in inventory" → gather or craft X first. "can't see / not visible" → mc goto_near the target, then collect/dig. "Task already running" → wait one turn, never stack movement. "No furnace within 4 blocks" → walk to a furnace or craft one. "No bed within 4 blocks" → mc goto_near 50 63 77 then mc sleep (night only). "it's not night" → work until evening. "Need a crafting table" → mc craft crafting_table anywhere (4 planks). "Missing ingredients" → check mc recipes ITEM, then gather. "No path / unreachable" → move to open ground and route around; water, cliffs, and leaves strand pathfinding.
 
 Rules:
 1. SURVIVAL OVERRIDES EVERYTHING: if a hostile mob is close, fight it when healthy and equipped, otherwise flee; if health is low, eat or flee to safety; never continue gathering while being attacked.

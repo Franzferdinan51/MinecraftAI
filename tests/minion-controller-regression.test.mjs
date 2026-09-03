@@ -324,4 +324,14 @@ assert.equal(
   'no sightings means no tracking line in the observation',
 );
 
+// Game knowledge: both prompts must teach mechanics + error recovery + beds.
+const promptSource = fs.readFileSync(sourcePath, 'utf8');
+for (const needle of ['MINECRAFT BASICS', 'ERROR RECOVERY', '46..54', 'crafting_table', 'furnace']) {
+  assert.ok(promptSource.includes(needle), `controller prompt must teach ${needle}`);
+}
+const bridgeSource = fs.readFileSync(new URL('../lmstudio-bridge/bridge.mjs', import.meta.url), 'utf8');
+for (const needle of ['Mechanics you must know', 'Errors tell you the fix', '46..54']) {
+  assert.ok(bridgeSource.includes(needle), `bridge prompt must teach ${needle}`);
+}
+
 console.log('minion-controller regression tests: PASS');

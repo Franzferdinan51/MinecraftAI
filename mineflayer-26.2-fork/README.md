@@ -70,9 +70,29 @@ directory, then apply each `patches/*.patch` file in order using
   26.1's protocol JSON as a placeholder. The bot is functional but
   the login packet's last byte is missing. This causes partial-packet
   warnings but no functional break.
-- New 26.2 blocks (e.g. the new crafter, new copper variants) are
-  unknown to the bot. The bot can identify them by name but their
-  properties may be missing.
+
+## Regenerated 2026-09-03: true 26.2 item/entity IDs
+
+The 26.2 data directory started as a copy of 26.1, but Mojang shifted
+the **item** registry (31 net-new sulfur/cinnabar items) and the
+**entity** registry (new `sulfur_cube` shifted later IDs by +1). Bots
+misread every item (dirt showed as saplings, beds as potions), which
+broke eating, crafting, smelting, and sharing.
+
+Fix, all verified live against the running 26.2 server:
+1. Ran the vanilla data generator from the official `server.jar`
+   (`java -DbundlerMainClass=net.minecraft.data.Main -jar server.jar
+   --server --reports`) and took `reports/registries.json`
+   `protocol_id` values as ground truth.
+2. Cross-checked with differential probes (`give X` via RCON vs the
+   name the bot client reported) — exact match.
+3. Rewrote `data/pc/26.2/items.json` (1506 remapped + 31 new),
+   `entities.json` (158, +`sulfur_cube`), `foods.json` (44 remapped).
+   Block IDs were verified unchanged (sand/leaves/water/stone match).
+4. Backups live next to the data dir as `26.2.bak-items-pre26.2regen`.
+
+To regenerate after a server update, repeat steps 1–3 and restart all
+bot processes (tables load at startup).
 
 ## When to remove
 
