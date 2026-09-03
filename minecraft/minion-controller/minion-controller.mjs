@@ -49,6 +49,8 @@ if (!Array.isArray(minions) || minions.length === 0) {
 
 const LMS_URL = (process.env.LMS_URL || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
 const MC_CLI = process.env.MC_CLI || `${process.env.HOME}/.local/bin/mc`;
+const LMS_API_KEY = process.env.LMS_API_KEY || '';
+const LMS_HEADERS = { 'content-type': 'application/json', ...(LMS_API_KEY ? { authorization: `Bearer ${LMS_API_KEY}` } : {}) };
 const BRIDGE_PORT = parseInt(process.env.MINION_BRIDGE_PORT || '3003', 10);
 const DEFAULT_MC_API = process.env.MC_API_URL || 'http://127.0.0.1:3001';
 let lmsTail = Promise.resolve();
@@ -134,14 +136,14 @@ async function lmsComplete(model, observation, name, role) {
 async function lmsCompleteUnlocked(model, observation, name, role) {
   const res = await fetch(`${LMS_URL}/chat/completions`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: LMS_HEADERS,
     body: JSON.stringify({
       model,
       messages: [
         { role: 'system', content: PROMPT_TMPL(name, role) },
         { role: 'user', content: observation },
       ],
-      max_tokens: 200,
+      max_tokens: 512,
       temperature: 0.4,
     }),
   });
@@ -150,7 +152,7 @@ async function lmsCompleteUnlocked(model, observation, name, role) {
     throw new Error(`lms ${res.status}: ${t.slice(0, 200)}`);
   }
   const j = await res.json();
-  return (j.choices?.[0]?.message?.content || '').trim();
+  return (j.choices?.[0]?.message?.content || j.choices?.[0]?.message?.reasoning_content || '').trim();
 }
 
 const state = new Map();
@@ -171,26 +173,37 @@ function parseCommand(line) {
   return tokens;
 }
 
-function fallbackAction(minion, statusJson, lastAction = '') {
+function fallbackAction(minion, statusJson, lastAction = '', tick = 0) {
   let parsed = {};
   try { parsed = JSON.parse(statusJson); } catch {}
-  const sceneHits = parsed.data?.scene?.visible_block_hits || [];
-  const visible = sceneHits.map((b) => b.name);
-  const notable = parsed.data?.notableBlocks || sceneHits;
+  const data = parsed.data || {};
+  const hits = data.scene?.visible_block_hits || [];
+  const visible = hits.map((b) => b.name);
+  const notable = data.notableBlocks || hits;
   const role = (minion.role || '').toLowerCase();
+  const pos = data.position || { x: 0, y: 70, z: 0 };
+  const inv = Object.fromEntries((data.inventory || []).map((i) => [i.name, i.count]));
+  const logs = Object.entries(inv).find(([n, c]) => (n.endsWith('_log') || n.endsWith('_wood')) && c > 0);
+  const woodType = logs?.[0]?.replace(/_(log|wood)$/, '');
+  const craftable = woodType ? `${woodType}_planks` : null;
+  const planks = Object.entries(inv).find(([n, c]) => n.endsWith('_planks') && c >= 4);
   const wanted = role.includes('farmer') ? ['grass_block', 'dirt']
     : role.includes('miner') ? ['stone', 'deepslate', 'diorite']
-    : ['oak_log', 'jungle_log', 'birch_log'];
-  if (/can't see|not visible/i.test(lastAction)) {
-    const target = notable.find((b) => wanted.includes(b.name));
-    if (target?.position) {
-      return `mc goto_near ${target.position.x} ${target.position.y} ${target.position.z}`;
-    }
+    : ['oak_log', 'jungle_log', 'birch_log', 'cherry_log'];
+  const target = notable.find((b) => wanted.includes(b.name)) || notable[0];
+  if (target?.position && (/can't see|not visible/i.test(lastAction) || tick % 5 === 1)) {
+    return `mc goto_near ${target.position.x} ${target.position.y} ${target.position.z}`;
   }
-  const pick = (choices, fallback) => choices.find((name) => visible.includes(name)) || fallback;
-  if (role.includes('farmer')) return `mc collect ${pick(['grass_block', 'dirt'], 'grass_block')} 3`;
-  if (role.includes('miner')) return `mc collect ${pick(['stone', 'deepslate', 'diorite'], 'stone')} 3`;
-  return `mc collect ${pick(['oak_log', 'jungle_log', 'birch_log'], 'oak_log')} 2`;
+  if ((role.includes('builder') || role.includes('planner')) && tick % 5 === 3) {
+    if (planks) return `mc place_fill ${planks[0]} ${Math.floor(pos.x) + 1} ${Math.floor(pos.y) - 1} ${Math.floor(pos.z) + 1} ${Math.floor(pos.x) + 3} ${Math.floor(pos.y)} ${Math.floor(pos.z) + 3} hollow`;
+    if (craftable) return `mc craft ${craftable}`;
+  }
+  const choices = role.includes('farmer') ? ['grass_block', 'dirt']
+    : role.includes('miner') ? ['stone', 'deepslate', 'diorite']
+    : ['oak_log', 'jungle_log', 'birch_log', 'cherry_log'];
+  const chosen = choices.find((name) => visible.includes(name));
+  if (!chosen && target?.position) return `mc goto_near ${target.position.x} ${target.position.y} ${target.position.z}`;
+  return `mc collect ${chosen || choices[0]} 2`;
 }
 
 async function tick(minion) {
@@ -208,11 +221,12 @@ async function tick(minion) {
     const reply = await lmsComplete(minion.model, observation, minion.name, minion.role);
     const think = (reply.match(/THINK:\s*(.+)/) || [, ''])[1].trim();
     let act = (reply.match(/ACT:\s*(.+)/) || [, ''])[1].trim();
-    if (!act || act.toUpperCase() === 'NONE') act = fallbackAction(minion, status, entry.last_action);
+    if (!act || act.toUpperCase() === 'NONE') act = fallbackAction(minion, status, entry.last_action, entry.ticks);
     let tokens = parseCommand(act);
-    if (tokens[0] !== 'mc') act = fallbackAction(minion, status, entry.last_action);
+    if (tokens[0] !== 'mc') act = fallbackAction(minion, status, entry.last_action, entry.ticks);
     tokens = parseCommand(act);
-    if (tokens[1] === 'chat' || tokens[1] === 'chat_to' || tokens[1] === 'wait') {
+    const nonGameplay = ['chat', 'chat_to', 'wait', 'scene', 'look', 'status', 'nearby', 'map', 'read_chat', 'inventory', 'recipes', 'find_blocks', 'find_entities'];
+    if (nonGameplay.includes(tokens[1])) {
       try {
         const out = await callMc(tokens.slice(1), apiUrl);
         if (tokens[1] === 'chat') rememberTeamChat(minion.name, tokens.slice(2).join(' '));
@@ -221,7 +235,7 @@ async function tick(minion) {
       } catch (err) {
         entry.last_action = `${act} -> ERROR ${err.message}`;
       }
-      act = fallbackAction(minion, status, entry.last_action);
+      act = fallbackAction(minion, status, entry.last_action, entry.ticks);
       tokens = parseCommand(act);
     }
     if (tokens[0] !== 'mc') {

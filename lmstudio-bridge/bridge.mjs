@@ -40,6 +40,8 @@ import { spawn } from 'node:child_process';
 
 const LMS_URL = (process.env.LMS_URL || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
 const LMS_MODEL = process.env.LMS_MODEL || 'google/gemma-4-26b-a4b-qat';
+const LMS_API_KEY = process.env.LMS_API_KEY || '';
+const LMS_HEADERS = { 'content-type': 'application/json', ...(LMS_API_KEY ? { authorization: `Bearer ${LMS_API_KEY}` } : {}) };
 const MC_CLI = process.env.MC_CLI || `${process.env.HOME}/.local/bin/mc`;
 const BRIDGE_PORT = parseInt(process.env.BRIDGE_PORT || '3002', 10);
 const BRIDGE_MODE = process.env.BRIDGE_MODE || 'alongside';
@@ -139,13 +141,13 @@ async function runTurn() {
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: observation },
       ],
-      max_tokens: 200,
+      max_tokens: 512,
       temperature: 0.4,
     };
 
     const res = await fetch(`${LMS_URL}/chat/completions`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: LMS_HEADERS,
       body: JSON.stringify(body),
     });
     if (!res.ok) {
@@ -154,7 +156,7 @@ async function runTurn() {
       return;
     }
     const json = await res.json();
-    const reply = (json.choices?.[0]?.message?.content || '').trim();
+    const reply = (json.choices?.[0]?.message?.content || json.choices?.[0]?.message?.reasoning_content || '').trim();
 
     const think = (reply.match(/THINK:\s*(.+)/) || [, ''])[1].trim();
     const act = (reply.match(/ACT:\s*(.+)/) || [, ''])[1].trim();
