@@ -39,7 +39,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 
 const LMS_URL = (process.env.LMS_URL || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
-const LMS_MODEL = process.env.LMS_MODEL || 'google/gemma-4-26b-a4b-qat';
+const LMS_MODEL = process.env.LMS_MODEL || 'ornith-1.5-9b';
 const LMS_API_KEY = process.env.LMS_API_KEY || '';
 const LMS_HEADERS = { 'content-type': 'application/json', ...(LMS_API_KEY ? { authorization: `Bearer ${LMS_API_KEY}` } : {}) };
 const MC_CLI = process.env.MC_CLI || `${process.env.HOME}/.local/bin/mc`;

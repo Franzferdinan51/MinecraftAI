@@ -451,6 +451,13 @@ async function tick(minion) {
     const apiUrl = minion.api_url || DEFAULT_MC_API;
     const status = await callMc(['status', '--json'], apiUrl);
     updateVillageCenter(minion, status);
+    if (stuckNudge(entry, status) === 'STUCK') {
+      try { await fetch(`${apiUrl}/task/cancel`, { method: 'POST' }); } catch {}
+      try {
+        const out = await runMinionAction(entry, ['look'], apiUrl);
+        entry.last_action = `stuck reset | task cancelled, looked around -> ${out.slice(0, 120)}`;
+      } catch (err) { entry.last_action = `stuck reset | task cancelled -> ${err.message.slice(0, 120)}`; }
+    }
     const botNames = minions.map((m) => m.name);
     // The raw read_chat API retains old entries forever. Feed the model only
     // current human messages; controller teamChat remains its bot coordination feed.
