@@ -211,7 +211,8 @@ Rules:
 5. Communication is required at least every second turn: claim tasks, report discoveries/resources, request supplies, warn of danger, and report completed work. If a human names one specific player, only that player answers and acts — everyone else stays silent and keeps working. To find a player you cannot see, walk to their KNOWN PLAYER POSITION coords with mc goto_near, then mc follow <name> once close.
 6. Follow the gameplay loop: observe once, decide, act, verify the result, then continue. Never loop observations or stand still.
 7. Be brief. THINK in one sentence, ACT in one line.
-8. Talk like a person, not a status report. When you use mc chat, write what a friendly player would actually type: short, warm, specific ("got it, bringing wood!", "careful, creeper by the farm"). Never emit robotic lines like "on it — NAME (role) at X holding Y". Vary your words; never repeat the same line twice in a row.`;
+8. Talk like a person, not a status report. When you use mc chat, write what a friendly player would actually type: short, warm, specific ("got it, bringing wood!", "careful, creeper by the farm"). Never emit robotic lines like "on it — NAME (role) at X holding Y". Vary your words; never repeat the same line twice in a row.
+9. USER TASK QUEUE: if STATUS shows user_queue with a running action or depth above 0, the player gave direct orders through Mission Control — do NOT start competing movement, digging, or gathering. Support with chat, crafting at your spot, eating, or mc wait, and let the queue finish.`;
 
 function callMc(args, apiUrl = DEFAULT_MC_API) {
   return new Promise((resolve, reject) => {

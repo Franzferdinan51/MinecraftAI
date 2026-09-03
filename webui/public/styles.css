@@ -92,3 +92,14 @@ body[data-view="ask"] #status-cards{display:none}
 .dash-row select{background:#383a40;color:var(--text);border:none;border-radius:6px;padding:6px}
 .pause-btn.on{background:#ed4245;color:#fff}
 .msg.ai .avatar{background:var(--accent)}
+/* task queue */
+#queue-list{font-size:12px;margin-bottom:8px;max-height:180px;overflow-y:auto}
+.q-item{background:#1e1f22;border-radius:6px;padding:6px 8px;margin-bottom:4px;display:flex;gap:6px;align-items:center}
+.q-item.running{border-left:3px solid #57f287}
+.q-item .q-act{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.q-item button{background:#383a40;color:var(--text);border:none;border-radius:4px;padding:2px 8px;cursor:pointer}
+.q-item button:hover{background:#ed4245;color:#fff}
+#queue-add{display:flex;gap:4px}
+#queue-action{flex:1;min-width:0;background:#383a40;color:var(--text);border:none;border-radius:6px;padding:6px;font-size:12px}
+#queue-args{flex:1;min-width:0;background:#383a40;color:var(--text);border:none;border-radius:6px;padding:6px;font-size:12px}
+#queue-btn{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:12px}

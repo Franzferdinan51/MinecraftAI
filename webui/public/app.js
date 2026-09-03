@@ -80,7 +80,7 @@ function memberHTML(b) {
 function renderMembers() {
   $('#member-list').innerHTML = bots.map(memberHTML).join('');
   document.querySelectorAll('.member').forEach((el) => {
-    el.onclick = () => { careBot = el.dataset.bot; setView(careBot); renderMembers(); $('#care-name').textContent = careBot; };
+    el.onclick = () => { careBot = el.dataset.bot; setView(careBot); renderMembers(); $('#care-name').textContent = careBot; loadQueue(); };
   });
 }
 function renderCards() {
@@ -102,7 +102,7 @@ function renderRail() {
   $('#dm-list').innerHTML = bots.map((b) =>
     `<div class="chan ${view === b.name ? 'active' : ''}" data-bot="${esc(b.name)}"><span class="hash">@</span>${esc(b.name)}</div>`).join('');
   document.querySelectorAll('[data-bot]').forEach((el) => {
-    el.onclick = () => { careBot = el.dataset.bot; setView(careBot); renderRail(); renderMembers(); $('#care-name').textContent = careBot; };
+    el.onclick = () => { careBot = el.dataset.bot; setView(careBot); renderRail(); renderMembers(); $('#care-name').textContent = careBot; loadQueue(); };
   });
 }
 
@@ -252,8 +252,60 @@ document.querySelectorAll('#care-btns button').forEach((btn) => {
   };
 });
 
+// ── task queue (per selected bot) ──
+let queueActions = {};
+async function loadQueueActions() {
+  try {
+    const r = await api('/api/queue-actions');
+    if (r.ok) {
+      queueActions = r.actions;
+      $('#queue-action').innerHTML = Object.keys(queueActions).map((a) => `<option value="${a}">${a}</option>`).join('');
+      updateQueueHint();
+    }
+  } catch {}
+}
+function updateQueueHint() {
+  const a = $('#queue-action').value;
+  const keys = queueActions[a] || [];
+  $('#queue-args').placeholder = keys.length ? `args: ${keys.join(' ')}` : 'no args';
+}
+async function loadQueue() {
+  const box = $('#queue-list');
+  if (!careBot) { box.innerHTML = '<p class="hint">pick a bot</p>'; return; }
+  try {
+    const r = await api('/api/queue?bot=' + encodeURIComponent(careBot));
+    if (!r.ok) { box.innerHTML = '<p class="hint">offline</p>'; return; }
+    const run = r.data?.running;
+    const items = [];
+    if (run && ['running'].includes(run.status)) items.push({ id: run.queued_id, label: `▶ ${run.action} ${esc(JSON.stringify(run.args || {}))}`, running: true });
+    (r.data?.queued || []).forEach((q, i) => items.push({ id: q.id, label: `${i + 1}. ${q.action} ${esc(JSON.stringify(q.args || {}))}`, running: false }));
+    box.innerHTML = items.length ? items.map((it) =>
+      `<div class="q-item ${it.running ? 'running' : ''}"><span class="q-act">${it.label}</span>${it.id ? `<button data-qid="${it.id}" type="button">✕</button>` : ''}</div>`).join('')
+      : '<p class="hint">queue empty</p>';
+    box.querySelectorAll('[data-qid]').forEach((btn) => {
+      btn.onclick = async () => {
+        await api('/api/queue/cancel', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ bot: careBot, id: btn.dataset.qid }) });
+        loadQueue();
+      };
+    });
+  } catch { box.innerHTML = '<p class="hint">offline</p>'; }
+}
+
 // ── loops ──
 setView('global');
 loadState();
+loadQueueActions();
+document.addEventListener('change', (e) => { if (e.target && e.target.id === 'queue-action') updateQueueHint(); });
+document.addEventListener('click', async (e) => {
+  if (e.target && e.target.id === 'queue-btn') {
+    if (!careBot) return toast('pick a bot first');
+    const action = $('#queue-action').value;
+    const args = $('#queue-args').value;
+    const r = await api('/api/queue', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ bot: careBot, action, args }) });
+    if (r.ok) { toast(`queued ${action} for ${careBot}`); $('#queue-args').value = ''; loadQueue(); }
+    else toast('queue failed: ' + (r.error || '?'));
+  }
+});
 setInterval(loadChat, 3000);
 setInterval(loadState, 5000);
+setInterval(() => { if (careBot) loadQueue(); }, 5000);

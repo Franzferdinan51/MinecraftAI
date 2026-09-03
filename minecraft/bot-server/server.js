@@ -106,6 +106,44 @@ let chatLog = [];
 let deathLog = [];
 let commandQueue = []; // complex commands for Hermes to process
 let currentTask = null; // background task state
+// ── User task queue (FIFO, Mission Control /queue). pumpQueue advances it. ──
+let taskQueue = [];
+let queueSeq = 0;
+function startQueuedTask(item) {
+  const actionFn = ACTIONS[item.action];
+  const taskId = `${item.action}_${Date.now()}`;
+  currentTask = { id: taskId, action: item.action, args: item.args || {}, status: 'running', started: Date.now(), result: null, error: null, queued_id: item.id, by: item.by || 'web' };
+  actionFn(item.args || {}).then(result => {
+    if (currentTask && currentTask.id === taskId && currentTask.status === 'running') {
+      currentTask.status = 'done';
+      currentTask.result = result;
+    }
+    actionHistory.push({ action: item.action, status: 'done', time: Date.now() });
+    if (actionHistory.length > MAX_ACTION_HISTORY) actionHistory.shift();
+  }).catch(err => {
+    if (currentTask && currentTask.id === taskId && currentTask.status === 'running') {
+      currentTask.status = 'error';
+      currentTask.error = err.message;
+    }
+    actionHistory.push({ action: item.action, status: 'error', time: Date.now() });
+    if (actionHistory.length > MAX_ACTION_HISTORY) actionHistory.shift();
+  });
+  return taskId;
+}
+function pumpQueue() {
+  if (!bot || !botReady) return;
+  if (currentTask && currentTask.status === 'running') return;
+  const next = taskQueue.shift();
+  if (!next) return;
+  if (!ACTIONS[next.action]) {
+    log(`Queue: unknown action "${next.action}" skipped`);
+    actionHistory.push({ action: next.action, status: 'error', time: Date.now() });
+    return;
+  }
+  const taskId = startQueuedTask(next);
+  log(`Queue: started "${next.action}" (${taskId}) for ${next.by || 'web'}, ${taskQueue.length} remaining`);
+}
+setInterval(() => { try { pumpQueue(); } catch (e) { log(`Queue pump error: ${e.message}`); } }, 2000);
 let lastDeath = null;
 let hardcoreDead = false; // Once true, no reconnect — permanent death
 let lastHealth = 20;
@@ -761,6 +799,14 @@ function briefState() {
     state.task_done = currentTask.result?.result || 'completed';
   } else if (currentTask && currentTask.status === 'error') {
     state.task_error = currentTask.error;
+  }
+  // User task queue (Mission Control) — the brain must not fight it.
+  if (taskQueue.length > 0 || (currentTask && currentTask.status === 'running' && currentTask.queued_id)) {
+    state.user_queue = {
+      running: currentTask && currentTask.status === 'running' ? currentTask.action : null,
+      depth: taskQueue.length,
+      next: taskQueue.slice(0, 3).map((q) => q.action),
+    };
   }
 
   return state;
@@ -2864,6 +2910,11 @@ const httpServer = http.createServer(async (req, res) => {
         const elapsed = Math.round((Date.now() - currentTask.started) / 1000);
         return respond(res, 200, { ok: true, data: { task: { ...currentTask, elapsed_s: elapsed } }, state: briefState() });
       }
+
+      // ── User task queue: GET /queue (POST lives in the POST section below) ──
+      if (path === '/queue' && req.method === 'GET') {
+        return respond(res, 200, { ok: true, data: { running: currentTask, queued: taskQueue }, state: briefState() });
+      }
     }
 
     // ── POST endpoints (actions) ────────────────
@@ -2879,6 +2930,32 @@ const httpServer = http.createServer(async (req, res) => {
           currentTask.status = 'cancelled';
         }
         return respond(res, 200, { ok: true, result: 'Task cancelled.', state: briefState() });
+      }
+
+      // ── User task queue: POST /queue (enqueue), POST /queue/cancel (remove/clear) ──
+      if (path === '/queue') {
+        const action = String(body.action || '');
+        if (!ACTIONS[action]) {
+          return respond(res, 400, { ok: false, error: `Unknown action "${action}". Available: ${Object.keys(ACTIONS).join(', ')}` });
+        }
+        const item = { id: `q${++queueSeq}`, action, args: body.args || {}, by: String(body.by || 'web').slice(0, 40), queued_at: Date.now() };
+        taskQueue.push(item);
+        log(`Queue: +${item.id} "${action}" by ${item.by} (depth ${taskQueue.length})`);
+        pumpQueue();
+        return respond(res, 200, { ok: true, queued_id: item.id, position: taskQueue.length, state: briefState() });
+      }
+      if (path === '/queue/cancel') {
+        const before = taskQueue.length;
+        if (body.id && currentTask && currentTask.queued_id === body.id && currentTask.status === 'running') {
+          const b = ensureBot();
+          b.pathfinder.setGoal(null);
+          try { b.stopDigging(); } catch {}
+          currentTask.status = 'cancelled';
+          return respond(res, 200, { ok: true, result: `Queued task ${body.id} cancelled while running.`, state: briefState() });
+        }
+        if (body.id) taskQueue = taskQueue.filter((q) => q.id !== body.id);
+        else taskQueue = [];
+        return respond(res, 200, { ok: true, result: body.id ? `Removed ${before - taskQueue.length} queued task(s).` : `Cleared ${before} queued task(s).`, state: briefState() });
       }
 
       // Background task system: POST /task/ACTION runs async, returns task_id

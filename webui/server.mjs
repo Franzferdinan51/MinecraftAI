@@ -129,7 +129,54 @@ const server = http.createServer(async (req, res) => {
       }));
     } catch { return json(res, 400, { ok: false, error: 'bad json' }); }
   }
-  // ── ask: chat directly with the village AI (Ornith, live village context) ──
+  // ── queue: line up tasks per bot (FIFO on the bot server) ──
+  const QUEUE_ACTIONS = {
+    bg_goto: ['x', 'y', 'z'], goto_near: ['x', 'y', 'z'], collect: ['block', 'count'],
+    dig: ['x', 'y', 'z'], craft: ['item'], smelt: ['item'], eat: [], sleep_bed: [],
+    till: ['count'], sow: ['seed', 'count'], harvest: [], breed: ['animal'],
+    shear: [], milk: [], fish: ['seconds'], follow: ['name'], flee: ['radius'], wait: ['seconds'],
+  };
+  const botByName = (n) => BOTS.find((b) => b.name === n);
+  function parseQueueArgs(action, text) {
+    const t = String(text || '').trim();
+    if (!t) return {};
+    if (t.startsWith('{')) return JSON.parse(t);
+    const keys = QUEUE_ACTIONS[action] || [];
+    const toks = t.split(/\s+/);
+    const args = {};
+    toks.forEach((tok, i) => {
+      const v = /^-?\d+(\.\d+)?$/.test(tok) ? Number(tok) : tok;
+      args[keys[i] || `arg${i}`] = v;
+    });
+    return args;
+  }
+  if (url.pathname === '/api/queue-actions') return json(res, 200, { ok: true, actions: QUEUE_ACTIONS });
+  if (url.pathname === '/api/queue') {
+    if (req.method === 'GET') {
+      const bot = botByName(url.searchParams.get('bot'));
+      if (!bot) return json(res, 400, { ok: false, error: 'unknown bot' });
+      return json(res, 200, await botFetch(bot.port, '/queue'));
+    }
+    try {
+      const body = await readBody(req);
+      const bot = botByName(body.bot);
+      if (!bot || !QUEUE_ACTIONS[body.action]) return json(res, 400, { ok: false, error: 'unknown bot or action' });
+      return json(res, 200, await botFetch(bot.port, '/queue', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: body.action, args: parseQueueArgs(body.action, body.args), by: 'Duckets (web)' }),
+      }));
+    } catch { return json(res, 400, { ok: false, error: 'bad json' }); }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/queue/cancel') {
+    try {
+      const body = await readBody(req);
+      const bot = botByName(body.bot);
+      if (!bot) return json(res, 400, { ok: false, error: 'unknown bot' });
+      return json(res, 200, await botFetch(bot.port, '/queue/cancel', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: body.id || '' }),
+      }));
+    } catch { return json(res, 400, { ok: false, error: 'bad json' }); }
+  }
   if (req.method === 'POST' && url.pathname === '/api/ask') {
     try {
       const body = await readBody(req);
