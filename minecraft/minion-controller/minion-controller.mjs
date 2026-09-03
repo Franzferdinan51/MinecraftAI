@@ -844,7 +844,10 @@ const server = http.createServer((req, res) => {
     }).catch((e) => send(400, { ok: false, error: e.message }));
     return;
   }
-  // Mission-control injection: POST /say {"from":"Duckets (web)","message":"...","target":"Steve"}
+  // Team radio: recent controller feed (plans, claims, acks) for Mission Control.
+  if (req.method === 'GET' && req.url === '/team') {
+    return send(200, { ok: true, messages: teamChat.slice(-30) });
+  }
   if (req.method === 'POST' && req.url === '/say') {
     let raw = '';
     req.on('data', (c) => { raw += c; if (raw.length > 4000) req.destroy(); });

@@ -19,6 +19,8 @@
     <header>HermesCraft</header>
     <div class="chan-group">TEXT CHANNELS</div>
     <div class="chan active" data-view="global"><span class="hash">#</span>global-chat</div>
+    <div class="chan" data-view="team"><span class="hash">📻</span>team-radio</div>
+    <div class="chan" data-view="map"><span class="hash">🗺</span>map</div>
     <div class="chan-group">DIRECT MESSAGES</div>
     <div id="dm-list"></div>
     <div class="chan-group">VILLAGE</div>
@@ -30,9 +32,17 @@
   </aside>
   <!-- main -->
   <main id="main">
-    <header id="chan-head"><span class="hash">#</span><b id="chan-name">global-chat</b><span id="chan-topic">everything said in the world, live</span></header>
+    <header id="chan-head"><span class="hash">#</span><b id="chan-name">global-chat</b><span id="chan-topic">everything said in the world, live</span><input id="chat-filter" placeholder="filter…"></header>
+    <div id="broadcast">
+      <button data-b="come" type="button">📣 Come here</button>
+      <button data-b="report" type="button">📝 Report in</button>
+      <button data-b="eat" type="button">🍖 Eat all</button>
+      <button data-b="sleep" type="button">🛏 Sleep all</button>
+      <button data-b="yard" type="button">🏠 Yard rally</button>
+    </div>
     <div id="messages"></div>
     <div id="status-cards"></div>
+    <div id="map-pane"><div class="panel wide"><h2>🗺 Village map</h2><p class="hint">Live positions, top-down. House at 50,63,85.</p><canvas id="map" width="560" height="560"></canvas></div></div>
     <div id="goal-pane">
       <div class="panel">
         <h2>🎯 Village goal</h2>
@@ -78,6 +88,7 @@
   </aside>
 </div>
 <div id="toast"></div>
+<div id="inv-modal"><div id="inv-box"><h3 id="inv-title">🎒</h3><div id="inv-list"></div><button id="inv-close" type="button">Close</button></div></div>
 <script src="/app.js"></script>
 </body>
 </html>

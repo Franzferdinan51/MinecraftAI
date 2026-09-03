@@ -39,7 +39,9 @@ async function loadChat() {
 function visibleMessages(all) {
   // only messages never rendered; filter by view
   const fresh = all.filter((m) => !rendered.has(msgKey(m)));
-  if (view === 'global') return fresh;
+  const filt = ($('#chat-filter')?.value || '').toLowerCase();
+  const passFilt = (m) => !filt || (m.from + ' ' + m.message).toLowerCase().includes(filt);
+  if (view === 'global' || view === 'team') return fresh.filter(passFilt);
   if (view === 'status') return [];
   // DM view: messages from that bot, or our DMs to them
   return fresh.filter((m) =>
@@ -47,7 +49,8 @@ function visibleMessages(all) {
 }
 function appendMsg(m) {
   rendered.add(msgKey(m));
-  if (view !== 'global' && !(m.from === view || (m.from === 'Duckets (web)' && m.channel === 'dm:' + view))) return;
+  if (view === 'team') { /* team radio renders everything fetched */ }
+  else if (view !== 'global' && !(m.from === view || (m.from === 'Duckets (web)' && m.channel === 'dm:' + view))) return;
   const box = $('#messages');
   const div = document.createElement('div');
   div.className = 'msg';
@@ -85,16 +88,18 @@ function renderMembers() {
 }
 function renderCards() {
   $('#status-cards').innerHTML = bots.map((b) => `
-    <div class="card" style="--c:${b.color}">
-      <h3>${esc(b.name)}<span class="dot ${b.online ? 'on' : 'off'}">● ${b.online ? 'online' : 'offline'}</span></h3>
-      <div class="role">${esc(b.role)} · :${b.port}</div>
+    <div class="card" style="--c:${b.color}" data-inv="${esc(b.name)}" title="click for inventory">
+      <h3>${esc(b.name)}${b.paused ? '<span class="paused-tag">PAUSED</span>' : ''}<span class="dot ${b.online ? 'on' : 'off'}">● ${b.online ? 'online' : 'offline'}</span></h3>
+      <div class="role">${esc(b.role)} · :${b.port}${b.ticks != null ? ` · ${b.ticks} thinks` : ''}</div>
       ${b.online ? `
       <div class="row">❤ Health ${b.health}/20</div><div class="bar"><i class="hp" style="width:${b.health * 5}%"></i></div>
       <div class="row">🍖 Food ${b.food}/20</div><div class="bar"><i class="food" style="width:${b.food * 5}%"></i></div>
       <div class="row">📍 ${b.pos ? b.pos.join(', ') : '?'} · ${b.time} · holding ${esc(b.holding)}</div>
+      <div class="row">💀 ${b.deaths != null ? b.deaths + ' deaths' : ''}${b.lastDeath ? ' · last: ' + esc(b.lastDeath) : ''}</div>
       <div class="task">${b.task ? '⚙ ' + esc(typeof b.task === 'string' ? b.task : (b.task.action || JSON.stringify(b.task))) : 'idle'}</div>`
       : `<div class="row">${esc(b.error || 'no response')}</div>`}
     </div>`).join('');
+  document.querySelectorAll('[data-inv]').forEach((el) => { el.onclick = () => openInventory(el.dataset.inv); });
 }
 function renderRail() {
   $('#dm-rail').innerHTML = bots.map((b) =>
@@ -109,7 +114,7 @@ function renderRail() {
 // ── views ──
 function setView(v) {
   view = v;
-  document.body.dataset.view = (v === 'status' || v === 'goal' || v === 'dash') ? v : 'chat';
+  document.body.dataset.view = (v === 'status' || v === 'goal' || v === 'dash' || v === 'map') ? v : 'chat';
   document.querySelectorAll('#channels .chan').forEach((c) => c.classList.remove('active'));
   const chanEl = document.querySelector(`#channels .chan[data-view="${v}"]`);
   if (chanEl) chanEl.classList.add('active');
@@ -124,6 +129,15 @@ function setView(v) {
     $('#chan-name').textContent = 'village-goal';
     $('#chan-topic').textContent = 'the one mission every bot works toward';
     loadGoal();
+  } else if (v === 'team') {
+    $('#chan-name').textContent = 'team-radio';
+    $('#chan-topic').textContent = 'plans, claims, acks — the bots coordinating';
+    $('#input').placeholder = 'Message team radio… (goes to all bots as chat)';
+    loadTeam();
+  } else if (v === 'map') {
+    $('#chan-name').textContent = 'map';
+    $('#chan-topic').textContent = 'live positions, top-down';
+    drawMap();
   } else if (v === 'ask') {
     $('#chan-name').textContent = 'ask-ai';
     $('#chan-topic').textContent = 'the overseer AI answers with live village knowledge';
@@ -158,6 +172,12 @@ $('#composer').onsubmit = async (e) => {
     try {
       const r = await api('/api/ask', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message: text }) });
       thinking.querySelector('.msg-text').textContent = r.ok ? r.reply : ('⚠ ' + (r.error || 'no answer'));
+      if (r.ok && r.did && r.did.length) {
+        const d = document.createElement('div');
+        d.className = 'did-line';
+        d.textContent = '⚙ ' + r.did.join(' · ');
+        thinking.querySelector('.msg-body').appendChild(d);
+      }
     } catch { thinking.querySelector('.msg-text').textContent = '⚠ mission control offline?'; }
     $('#messages').scrollTop = $('#messages').scrollHeight;
     return;
@@ -252,6 +272,82 @@ document.querySelectorAll('#care-btns button').forEach((btn) => {
   };
 });
 
+// ── team radio ──
+let teamSeen = new Set();
+async function loadTeam() {
+  if (view !== 'team') return;
+  try {
+    const r = await api('/api/team');
+    if (!r.ok) return;
+    const box = $('#messages');
+    let added = 0;
+    for (const m of (r.messages || [])) {
+      const k = m.time + '|' + m.from + '|' + m.message;
+      if (teamSeen.has(k)) continue;
+      teamSeen.add(k);
+      const div = document.createElement('div');
+      div.className = 'msg';
+      div.innerHTML = `<div class="avatar" style="background:${botColor(m.from)}">📻</div>
+        <div class="msg-body"><div class="msg-head"><b style="color:${botColor(m.from)}">${esc(m.from)}</b><time>${esc(new Date(m.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))}</time></div>
+        <div class="msg-text">${esc(m.message)}</div></div>`;
+      box.appendChild(div);
+      while (box.children.length > 200) box.removeChild(box.firstChild);
+      added++;
+    }
+    if (added) box.scrollTop = box.scrollHeight;
+  } catch {}
+}
+
+// ── live map ──
+const HOUSE = [50, 63, 85];
+const BEDS = [[46, 77], [48, 77], [50, 77], [52, 77]];
+function drawMap() {
+  const cv = $('#map');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const W = cv.width, range = 70;
+  const px = (x) => (x - (HOUSE[0] - range)) / (range * 2) * W;
+  const pz = (z) => (z - (HOUSE[2] - range)) / (range * 2) * W;
+  ctx.fillStyle = '#1e1f22'; ctx.fillRect(0, 0, W, W);
+  ctx.strokeStyle = '#2b2d31';
+  for (let g = 0; g <= W; g += W / 14) {
+    ctx.beginPath(); ctx.moveTo(g, 0); ctx.lineTo(g, W); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, g); ctx.lineTo(W, g); ctx.stroke();
+  }
+  // beds + house
+  ctx.fillStyle = '#faa81a';
+  BEDS.forEach(([x, z]) => ctx.fillRect(px(x) - 3, pz(z) - 3, 6, 6));
+  ctx.fillStyle = '#5865f2';
+  ctx.beginPath(); ctx.arc(px(HOUSE[0]), pz(HOUSE[2]), 8, 0, 7); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('HOUSE', px(HOUSE[0]), pz(HOUSE[2]) - 12);
+  // bots
+  ctx.textAlign = 'center';
+  bots.forEach((b) => {
+    if (!b.pos) return;
+    ctx.fillStyle = b.paused ? '#555' : b.color;
+    ctx.beginPath(); ctx.arc(px(b.pos[0]), pz(b.pos[2]), 9, 0, 7); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif';
+    ctx.fillText(b.name, px(b.pos[0]), pz(b.pos[2]) - 13);
+  });
+}
+
+// ── alerts (low HP, deaths) ──
+let prevHp = {}, prevDeaths = {};
+async function checkAlerts() {
+  for (const b of bots) {
+    if (!b.online) continue;
+    if (b.health != null && b.health < 10 && (prevHp[b.name] ?? 99) >= 10) toast(`⚠ ${b.name} is hurt! HP ${b.health}`);
+    prevHp[b.name] = b.health;
+    try {
+      const r = await api(`/api/bot/${b.name}/deaths`);
+      const total = r.data?.total ?? 0;
+      if ((prevDeaths[b.name] ?? total) < total) toast(`☠ ${b.name} died!`);
+      prevDeaths[b.name] = total;
+    } catch {}
+  }
+}
+
 // ── task queue (per selected bot) ──
 let queueActions = {};
 async function loadQueueActions() {
@@ -291,10 +387,35 @@ async function loadQueue() {
   } catch { box.innerHTML = '<p class="hint">offline</p>'; }
 }
 
+// ── inventory modal ──
+async function openInventory(name) {
+  $('#inv-title').textContent = '🎒 ' + name;
+  $('#inv-list').innerHTML = 'loading…';
+  $('#inv-modal').classList.add('open');
+  try {
+    const r = await api(`/api/bot/${name}/inventory`);
+    const items = r.data?.items || r.data?.inventory || r.data || [];
+    const rows = Array.isArray(items) ? items : Object.entries(items).map(([n, c]) => ({ name: n, count: c }));
+    $('#inv-list').innerHTML = rows.length
+      ? rows.map((it) => `<div class="inv-row"><span>${esc(it.name || it.item || '?')}</span><b>x${it.count ?? 1}</b></div>`).join('')
+      : 'empty pockets';
+  } catch { $('#inv-list').textContent = 'offline'; }
+}
+
 // ── loops ──
 setView('global');
 loadState();
 loadQueueActions();
+document.addEventListener('click', async (e) => {
+  if (e.target && e.target.id === 'inv-close') $('#inv-modal').classList.remove('open');
+  if (e.target && e.target.id === 'inv-modal') $('#inv-modal').classList.remove('open');
+  const bcast = e.target && e.target.dataset && e.target.dataset.b;
+  if (bcast) {
+    const r = await api('/api/broadcast', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: bcast }) });
+    toast(r.ok ? `broadcast: ${bcast} — watch chat` : ('failed: ' + (r.error || '?')));
+    loadChat();
+  }
+});
 document.addEventListener('change', (e) => { if (e.target && e.target.id === 'queue-action') updateQueueHint(); });
 document.addEventListener('click', async (e) => {
   if (e.target && e.target.id === 'queue-btn') {
@@ -309,3 +430,7 @@ document.addEventListener('click', async (e) => {
 setInterval(loadChat, 3000);
 setInterval(loadState, 5000);
 setInterval(() => { if (careBot) loadQueue(); }, 5000);
+setInterval(() => { if (view === 'team') loadTeam(); }, 4000);
+setInterval(() => { if (view === 'map') drawMap(); }, 5000);
+setInterval(checkAlerts, 15000);
+document.addEventListener('input', (e) => { if (e.target && e.target.id === 'chat-filter' && (view === 'global' || view === 'team')) { $('#messages').innerHTML = ''; rendered.clear(); teamSeen.clear(); loadChat(); loadTeam(); } });
