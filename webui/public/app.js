@@ -238,9 +238,11 @@ document.addEventListener('click', async (e) => {
 });
 
 // ── interface settings (persisted) ──
-const UI = Object.assign({ refresh: 5, overheard: true, mapMin: 160, chatN: 60, toasts: true },
+const UI = Object.assign({ refresh: 5, overheard: true, mapMin: 160, chatN: 60, toasts: true, theme: 'discord', compact: false },
   JSON.parse(localStorage.getItem('hermes-ui') || '{}'));
-function saveUI() { localStorage.setItem('hermes-ui', JSON.stringify(UI)); armTimers(); }
+function applyUI() { document.body.dataset.theme = UI.theme; document.body.classList.toggle('compact', !!UI.compact); }
+function saveUI() { localStorage.setItem('hermes-ui', JSON.stringify(UI)); applyUI(); armTimers(); }
+applyUI();
 const _origToast = toast;
 toast = function (msg) { if (UI.toasts) _origToast(msg); };
 
@@ -486,12 +488,19 @@ function renderDashSettings() {
       <select id="set-chatn">${[20, 60, 100].map((n) => `<option value="${n}" ${UI.chatN === n ? 'selected' : ''}>${n}</option>`).join('')}</select>
       <span><b>Map area:</b></span>
       <select id="set-mapmin">${[[160, 'village'], [256, 'wide'], [384, 'region']].map(([v, label]) => `<option value="${v}" ${UI.mapMin === v ? 'selected' : ''}>${label}</option>`).join('')}</select>
-      <span class="role">dashboard extras auto-refresh every 20s</span></div>`;
+      <span class="role">extras auto-refresh every 20s</span></div>
+    <div class="form-row"><span><b>Appearance:</b></span>
+      <select id="set-theme"><option value="discord">Discord dark</option><option value="midnight">Midnight blue</option><option value="terminal">Terminal green</option></select>
+      <label><input type="checkbox" id="set-compact"> compact mode</label></div>`;
   $('#set-refresh').onchange = (e) => { UI.refresh = Number(e.target.value); saveUI(); toast('refresh → ' + UI.refresh + 's'); };
   $('#set-overheard').onchange = (e) => { UI.overheard = e.target.checked; saveUI(); loadChat(); };
   $('#set-toasts').onchange = (e) => { UI.toasts = e.target.checked; saveUI(); };
   $('#set-chatn').onchange = (e) => { UI.chatN = Number(e.target.value); saveUI(); loadChat(); };
   $('#set-mapmin').onchange = (e) => { UI.mapMin = Number(e.target.value); saveUI(); terrainCache = null; if (view === 'map') drawMap(); };
+  $('#set-theme').value = UI.theme;
+  $('#set-theme').onchange = (e) => { UI.theme = e.target.value; saveUI(); toast('theme updated'); };
+  $('#set-compact').checked = !!UI.compact;
+  $('#set-compact').onchange = (e) => { UI.compact = e.target.checked; saveUI(); toast(UI.compact ? 'compact mode on' : 'compact mode off'); };
 }
 document.querySelectorAll('#care-btns button').forEach((btn) => {
   btn.onclick = async () => {
@@ -700,3 +709,11 @@ document.addEventListener('click', async (e) => {
   }
 });
 document.addEventListener('input', (e) => { if (e.target && e.target.id === 'chat-filter' && (view === 'global' || view === 'team')) { $('#messages').innerHTML = ''; rendered.clear(); teamSeen.clear(); loadChat(); loadTeam(); } });
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setView('ask'); $('#input').focus(); }
+  else if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') { e.preventDefault(); $('#input').focus(); }
+  else if (e.key === 'Escape') { $('#inv-modal')?.classList.remove('open'); $('#input')?.blur(); }
+  else if (e.altKey && e.key === '1') setView('global');
+  else if (e.altKey && e.key === '2') setView('dash');
+  else if (e.altKey && e.key === '3') setView('map');
+});

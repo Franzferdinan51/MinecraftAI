@@ -151,3 +151,6 @@ body[data-view="map"] #messages,body[data-view="map"] #composer{display:none}
 .activity-icon{width:20px;text-align:center}.activity-row .role{font-size:11px}.activity-row>div{min-width:0;overflow-wrap:anywhere}
 @media (max-width:1000px){#channels{width:190px}#members{width:210px}.vital-grid{grid-template-columns:1fr}}
 @media (max-width:720px){#rail{width:54px}.guild,.dm-dot{width:38px;height:38px}#channels{width:170px}#members{display:none}#chan-topic{display:none}.panel{padding:14px}}
+body[data-theme="midnight"]{--bg:#202638;--side:#182033;--dark:#121827;--darker:#0c111d;--accent:#6ea8fe;--border:#101726}
+body[data-theme="terminal"]{--bg:#101712;--side:#142019;--dark:#0c120e;--darker:#080c09;--text:#d6f7dc;--muted:#82a98a;--accent:#35c759;--border:#0a110c}
+body.compact #messages{padding:6px 10px;gap:0}body.compact .msg{padding:1px 0}body.compact .msg .avatar{width:28px;height:28px;font-size:11px}body.compact .msg{gap:7px}body.compact #dash-pane{padding:8px}body.compact #dash-pane .panel{padding:12px;margin-bottom:7px}
