@@ -171,12 +171,25 @@ function parseCommand(line) {
   return tokens;
 }
 
-function fallbackAction(minion) {
+function fallbackAction(minion, statusJson, lastAction = '') {
+  let parsed = {};
+  try { parsed = JSON.parse(statusJson); } catch {}
+  const visible = (parsed.data?.nearbyBlocks || []).map((b) => b.name);
+  const notable = parsed.data?.notableBlocks || [];
   const role = (minion.role || '').toLowerCase();
-  if (role.includes('farmer')) return 'mc collect grass_block 3';
-  if (role.includes('miner')) return 'mc collect stone 3';
-  if (role.includes('scout') || role.includes('defender')) return 'mc collect oak_log 1';
-  return 'mc collect oak_log 2';
+  const wanted = role.includes('farmer') ? ['grass_block', 'dirt']
+    : role.includes('miner') ? ['stone', 'deepslate', 'diorite']
+    : ['oak_log', 'jungle_log', 'birch_log'];
+  if (/can't see|not visible/i.test(lastAction)) {
+    const target = notable.find((b) => wanted.includes(b.name));
+    if (target?.position) {
+      return `mc goto_near ${target.position.x} ${target.position.y} ${target.position.z}`;
+    }
+  }
+  const pick = (choices, fallback) => choices.find((name) => visible.includes(name)) || fallback;
+  if (role.includes('farmer')) return `mc collect ${pick(['grass_block', 'dirt'], 'grass_block')} 3`;
+  if (role.includes('miner')) return `mc collect ${pick(['stone', 'deepslate', 'diorite'], 'stone')} 3`;
+  return `mc collect ${pick(['oak_log', 'jungle_log', 'birch_log'], 'oak_log')} 2`;
 }
 
 async function tick(minion) {
@@ -185,7 +198,7 @@ async function tick(minion) {
   entry.pending = true;
   try {
     const apiUrl = minion.api_url || DEFAULT_MC_API;
-    const status = await callMc(['status'], apiUrl);
+    const status = await callMc(['status', '--json'], apiUrl);
     const chat = await callMc(['read_chat', '5'], apiUrl);
     const team = teamChat.slice(-10).map((m) => `<${m.from}> ${m.message}`).join('\n') || '(no controller team messages yet)';
     const observation = `STATUS:\n${status}\n\nCHAT:\n${chat}\n\nTEAM CHAT (reliable controller feed):\n${team}\n\nLAST ACTION: ${entry.last_action}`;
@@ -195,7 +208,7 @@ async function tick(minion) {
     const think = (reply.match(/THINK:\s*(.+)/) || [, ''])[1].trim();
     let act = (reply.match(/ACT:\s*(.+)/) || [, ''])[1].trim();
     if (!act || act.toUpperCase() === 'NONE') {
-      act = fallbackAction(minion);
+      act = fallbackAction(minion, status, entry.last_action);
       entry.last_action = `${think || 'model idle'} | fallback ${act}`;
     }
     const tokens = parseCommand(act);
