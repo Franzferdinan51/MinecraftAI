@@ -66,7 +66,10 @@ function appendMsg(m) {
 }
 
 // ── state ──
+let stateInFlight = false;
 async function loadState() {
+  if (stateInFlight) return;
+  stateInFlight = true;
   try {
     const r = await api('/api/state');
     if (!r.ok) return;
@@ -76,6 +79,7 @@ async function loadState() {
     if (view === 'map') drawMap();
     $('#online-count').textContent = bots.filter((b) => b.online).length;
   } catch (e) { /* retry */ }
+  finally { stateInFlight = false; }
 }
 function memberHTML(b) {
   return `<div class="member ${careBot === b.name ? 'sel' : ''}" data-bot="${esc(b.name)}">
@@ -155,6 +159,7 @@ function setView(v) {
   }
   $('#messages').innerHTML = '';
   rendered.clear();
+  if (v === 'team') teamSeen.clear();
   loadChat(); renderRail();
 }
 document.querySelectorAll('#channels .chan[data-view]').forEach((el) => {
@@ -376,8 +381,10 @@ function renderDashServer() {
 function invEntries(inv) {
   if (!inv) return [];
   if (Array.isArray(inv.items)) return inv.items;
-  if (inv.categories) return Object.entries(inv.categories).flatMap(([cat, arr]) => arr.map((it) => ({ ...it, cat })));
+  if (inv.categories) return Object.entries(inv.categories).flatMap(([cat, arr]) => Array.isArray(arr) ? arr.map((it) => ({ ...it, cat })) : []);
   if (Array.isArray(inv)) return inv;
+  const meta = new Set(['summary', 'totalSlots', 'error']);
+  if (typeof inv === 'object') return Object.entries(inv).filter(([name]) => !meta.has(name)).map(([name, count]) => ({ name, count }));
   return [];
 }
 function renderDashInv(all) {
@@ -387,12 +394,14 @@ function renderDashInv(all) {
   const filt = ($('#inv-search')?.value || '').toLowerCase();
   box.innerHTML = `<div class="form-row"><input id="inv-search" placeholder="search items… (e.g. iron, bread)" value="${esc($('#inv-search')?.value || '')}"></div>` +
     bots.map((b) => {
-      const items = invEntries(all[b.name]).filter((it) => !filt || (it.name || '').includes(filt));
+      const data = all[b.name];
+      const offline = data?.error;
+      const items = invEntries(data).filter((it) => !filt || String(it.name || it.item || '').toLowerCase().includes(filt));
       const total = items.reduce((s, it) => s + (it.count || 1), 0);
       return `<div class="inv-bot"><div class="inv-head" style="--c:${b.color}"><b>${esc(b.name)}</b>
         <span class="role">${total} items · ${items.length} slots</span>
         <button data-clear="${esc(b.name)}" type="button" title="empty this bot's pockets">🧹 clear</button></div>
-        <div class="inv-grid">${items.length ? items.map((it) =>
+        <div class="inv-grid">${offline ? `<span class="offline-note">⚠ ${esc(offline)}</span>` : items.length ? items.map((it) =>
           `<div class="inv-cell" title="${esc(it.cat || '')}">${esc((it.name || '?').replace(/_/g, ' '))}<b>x${it.count ?? 1}</b></div>`).join('')
           : '<span class="role">empty pockets</span>'}</div></div>`;
     }).join('');
