@@ -78,11 +78,17 @@ const server = http.createServer(async (req, res) => {
       ]);
       const d = st.data || {};
       const c = ctrlByName[b.name] || {};
+      // HermesBot runs via the bridge, not the controller — no thinks/last_action.
+      // Fall back to its live task so the dashboard never shows "?".
+      const liveTask = task.data?.task;
+      const fallbackAction = liveTask
+        ? `task | ${liveTask.action}${liveTask.status ? ` (${liveTask.status})` : ''} -> ${String(liveTask.result?.result || liveTask.error || 'running').slice(0, 100)}`
+        : 'bridge-driven — see team radio';
       return {
         name: b.name, role: c.role || b.role, color: b.color, port: b.port,
         online: st.ok === true,
         paused: !!c.paused, interval_ms: c.interval_ms || null, ticks: c.ticks ?? null,
-        last_action: (c.last_action || '').slice(0, 160),
+        last_action: ((c.last_action || '') || fallbackAction).slice(0, 160),
         health: d.health ?? null, food: d.food ?? null,
         pos: d.position ? [Math.floor(d.position.x), Math.floor(d.position.y), Math.floor(d.position.z)] : null,
         holding: d.holding?.name || 'empty',

@@ -72,6 +72,7 @@ async function loadState() {
     bots = r.bots;
     renderMembers(); renderCards(); renderRail();
     if (view === 'dash') renderDash();
+    if (view === 'map') drawMap();
     $('#online-count').textContent = bots.filter((b) => b.online).length;
   } catch (e) { /* retry */ }
 }
@@ -243,9 +244,11 @@ function renderDash() {
   box.innerHTML = bots.map((b) => `
     <div class="dash-row">
       <b style="color:${b.color}">${esc(b.name)}</b>
-      <span class="role">${esc(b.role)} · ${b.ticks ?? '?'} thinks · ${esc((b.last_action || '—').slice(0, 80))}</span>
-      <select data-pace="${esc(b.name)}">${PACES.map(([ms, label]) => `<option value="${ms}" ${b.interval_ms === ms ? 'selected' : ''}>${label}</option>`).join('')}</select>
-      <button class="pause-btn ${b.paused ? 'on' : ''}" data-pause="${esc(b.name)}" type="button">${b.paused ? '▶ Resume' : '⏸ Pause'}</button>
+      <span class="role">${esc(b.role)} · ${b.ticks != null ? b.ticks + ' thinks' : (b.name === 'HermesBot' ? 'bridge-driven' : '?')} · ${esc((b.last_action || '—').slice(0, 80))}</span>
+      ${b.name === 'HermesBot'
+        ? '<span class="role">pace + pause live in the bridge, not here</span>'
+        : `<select data-pace="${esc(b.name)}">${PACES.map(([ms, label]) => `<option value="${ms}" ${b.interval_ms === ms ? 'selected' : ''}>${label}</option>`).join('')}</select>
+           <button class="pause-btn ${b.paused ? 'on' : ''}" data-pause="${esc(b.name)}" type="button">${b.paused ? '▶ Resume' : '⏸ Pause'}</button>`}
     </div>`).join('') || '<p class="hint">loading…</p>';
   box.querySelectorAll('[data-pause]').forEach((btn) => {
     btn.onclick = async () => {
@@ -298,37 +301,55 @@ async function loadTeam() {
   } catch {}
 }
 
-// ── live map ──
+// ── live map (auto-fits all bot positions + house) ──
 const HOUSE = [50, 63, 85];
 const BEDS = [[46, 77], [48, 77], [50, 77], [52, 77]];
 function drawMap() {
   const cv = $('#map');
   if (!cv) return;
   const ctx = cv.getContext('2d');
-  const W = cv.width, range = 70;
-  const px = (x) => (x - (HOUSE[0] - range)) / (range * 2) * W;
-  const pz = (z) => (z - (HOUSE[2] - range)) / (range * 2) * W;
-  ctx.fillStyle = '#1e1f22'; ctx.fillRect(0, 0, W, W);
-  ctx.strokeStyle = '#2b2d31';
-  for (let g = 0; g <= W; g += W / 14) {
-    ctx.beginPath(); ctx.moveTo(g, 0); ctx.lineTo(g, W); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, g); ctx.lineTo(W, g); ctx.stroke();
+  const W = cv.width;
+  // Bounds: house + every known bot pos, padded, min 40 blocks across.
+  let xs = [HOUSE[0]], zs = [HOUSE[2]];
+  bots.forEach((b) => { if (b.pos) { xs.push(b.pos[0]); zs.push(b.pos[2]); } });
+  let minX = Math.min(...xs) - 12, maxX = Math.max(...xs) + 12;
+  let minZ = Math.min(...zs) - 12, maxZ = Math.max(...zs) + 12;
+  const span = Math.max(maxX - minX, maxZ - minZ, 40);
+  const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+  minX = cx - span / 2; maxX = cx + span / 2; minZ = cz - span / 2; maxZ = cz + span / 2;
+  const px = (x) => (x - minX) / span * W;
+  const pz = (z) => (z - minZ) / span * W;
+  ctx.fillStyle = '#101114'; ctx.fillRect(0, 0, W, W);
+  ctx.strokeStyle = '#3a3d44'; ctx.lineWidth = 1;
+  const step = Math.max(5, Math.round(span / 14 / 5) * 5);
+  ctx.fillStyle = '#6b7078'; ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
+  for (let gx = Math.ceil(minX / step) * step; gx <= maxX; gx += step) {
+    ctx.beginPath(); ctx.moveTo(px(gx), 0); ctx.lineTo(px(gx), W); ctx.stroke();
+    ctx.fillText(gx, px(gx) + 3, 12);
+  }
+  for (let gz = Math.ceil(minZ / step) * step; gz <= maxZ; gz += step) {
+    ctx.beginPath(); ctx.moveTo(0, pz(gz)); ctx.lineTo(W, pz(gz)); ctx.stroke();
+    ctx.fillText(gz, 4, pz(gz) - 3);
   }
   // beds + house
   ctx.fillStyle = '#faa81a';
   BEDS.forEach(([x, z]) => ctx.fillRect(px(x) - 3, pz(z) - 3, 6, 6));
   ctx.fillStyle = '#5865f2';
-  ctx.beginPath(); ctx.arc(px(HOUSE[0]), pz(HOUSE[2]), 8, 0, 7); ctx.fill();
-  ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText('HOUSE', px(HOUSE[0]), pz(HOUSE[2]) - 12);
-  // bots
+  ctx.beginPath(); ctx.arc(px(HOUSE[0]), pz(HOUSE[2]), 9, 0, 7); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('HOUSE', px(HOUSE[0]), pz(HOUSE[2]) - 13);
+  // bots (clamped to edge with name so nobody vanishes)
   ctx.textAlign = 'center';
   bots.forEach((b) => {
     if (!b.pos) return;
+    const cxp = Math.min(W - 10, Math.max(10, px(b.pos[0])));
+    const czp = Math.min(W - 10, Math.max(10, pz(b.pos[2])));
     ctx.fillStyle = b.paused ? '#555' : b.color;
-    ctx.beginPath(); ctx.arc(px(b.pos[0]), pz(b.pos[2]), 9, 0, 7); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif';
-    ctx.fillText(b.name, px(b.pos[0]), pz(b.pos[2]) - 13);
+    ctx.beginPath(); ctx.arc(cxp, czp, 10, 0, 7); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif';
+    ctx.fillText(b.name, cxp, czp - 14);
+    ctx.fillStyle = '#b5bac1'; ctx.font = '10px sans-serif';
+    ctx.fillText(`${b.pos[0]},${b.pos[2]}`, cxp, czp + 22);
   });
 }
 
