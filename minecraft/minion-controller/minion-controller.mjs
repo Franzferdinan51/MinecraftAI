@@ -55,10 +55,13 @@ const BRIDGE_PORT = parseInt(process.env.MINION_BRIDGE_PORT || '3003', 10);
 const DEFAULT_MC_API = process.env.MC_API_URL || 'http://127.0.0.1:3001';
 let lmsTail = Promise.resolve();
 const teamChat = [];
+const handledHumanChat = new Map();
 
 const PROMPT_TMPL = (name, role = 'village resident') => `You are ${name}, the ${role}, an AI player in a Minecraft world.
 
-MISSION: Work together in **in-game chat** to build a safe, attractive starter village around the first useful flat area you find. Chat is your team channel and is required: announce when you find resources, claim a task, ask another named bot for supplies, report completed work, warn about danger, and answer other bots. Do not silently work when you can communicate. Build modest structures from materials you can actually gather. Coordinate in chat, protect supplies, light paths and houses, and do not destroy existing player builds. Continue the village project autonomously while the human player is asleep.
+MISSION: Build a safe starter village with the other players. Follow this loop forever: assess threats and health; answer human and team chat; scout a safe flat site; gather the resources your role needs; craft useful tools, food, torches and building materials; construct a small house, farm, path, storage area or defenses; light the area; report exactly what you did; then choose the next task. Never stand still just because the scene is unfamiliar.
+
+DETAILED GAMEPLAY: Minecraft is a survival game. Look around, move deliberately, collect drops, use crafting recipes, make tools before mining, eat when hungry, avoid falls and hostile mobs, sleep or shelter at night, and return to the village area after scouting. Builders gather logs, convert logs to planks, and place walls/floors/roofs. Farmers gather grass/seeds and food, plant and harvest crops, and share food. Miners gather stone, coal, iron and useful ores and report locations. Scouts check terrain and danger, escort teammates, light paths, and defend the village. Claim tasks in chat so two bots do not duplicate work. Use only materials you possess and never grief existing player builds.
 
 You observe the world with shell commands and act with shell commands.
 Use the literal program \`mc\` for everything. Never use code fences; just
@@ -103,12 +106,12 @@ Available actions:
   mc wait N
 
 Rules:
-1. Survival first. If health is below 10, \`mc eat\`.
-2. The village mission has priority. Do not choose \`NONE\` merely because the scene is unfamiliar; gather, move, build, farm, or communicate.
-3. Communication is required. At least every second turn, send a short \`mc chat\` update naming your task, discovery, request, warning, or completed work. Answer messages from the other bots.
-4. After three observations in a row, take an action. Never loop observations.
-5. If a player asked for something in chat, do that.
-6. Do not destroy other players' builds.
+1. SURVIVAL OVERRIDES EVERYTHING: if a hostile mob is close, fight it when healthy and equipped, otherwise flee; if health is low, eat or flee to safety; never continue gathering while being attacked.
+2. Answer every new message from the human player or a teammate with a short chat reply before doing the requested work.
+3. The village mission has priority. Do not choose \`NONE\` or an observation command as your turn; take a movement, gathering, crafting, building, defense, food, or communication action.
+4. Communication is required at least every second turn: claim tasks, report discoveries/resources, request supplies, warn of danger, and report completed work.
+5. Follow the gameplay loop: observe once, decide, act, verify the result, then continue. Never loop observations or stand still.
+6. Do not destroy other players' builds or steal from chests.
 7. Be brief. THINK in one sentence, ACT in one line.`;
 
 function callMc(args, apiUrl = DEFAULT_MC_API) {
@@ -173,6 +176,30 @@ function parseCommand(line) {
   return tokens;
 }
 
+function survivalAction(statusJson) {
+  let d = {};
+  try { d = JSON.parse(statusJson).data || {}; } catch {}
+  const hostile = (d.nearbyEntities || []).find((e) => e.kind === 'hostile');
+  const food = (d.inventory || []).some((i) => /bread|apple|carrot|potato|beef|pork|chicken|mutton|fish|stew/i.test(i.name) && i.count > 0);
+  if (hostile && hostile.distance <= 10 && (d.health || 0) >= 10) return `mc fight ${hostile.type}`;
+  if ((d.health || 0) < 10) return food ? 'mc eat' : 'mc flee 20';
+  if (hostile && hostile.distance <= 18) return (d.health || 0) >= 14 ? `mc fight ${hostile.type}` : 'mc flee 20';
+  return '';
+}
+
+function humanMessages(statusJson) {
+  let d = {};
+  try { d = JSON.parse(statusJson).data || {}; } catch {}
+  return (d.unreadChat || []).filter((m) => /ducket/i.test(m.from || ''));
+}
+
+function rememberHumanMessage(botName, message) {
+  const key = `${botName}:${message.from}:${message.message}`;
+  if (handledHumanChat.has(key)) return false;
+  handledHumanChat.set(key, Date.now());
+  while (handledHumanChat.size > 100) handledHumanChat.delete(handledHumanChat.keys().next().value);
+  return true;
+}
 function fallbackAction(minion, statusJson, lastAction = '', tick = 0) {
   let parsed = {};
   try { parsed = JSON.parse(statusJson); } catch {}
@@ -214,6 +241,22 @@ async function tick(minion) {
     const apiUrl = minion.api_url || DEFAULT_MC_API;
     const status = await callMc(['status', '--json'], apiUrl);
     const chat = await callMc(['read_chat', '5'], apiUrl);
+    const human = humanMessages(status).find((m) => rememberHumanMessage(minion.name, m));
+    if (human) {
+      const reply = /kill|enemy|mob|defend|attack/i.test(human.message)
+        ? `${minion.name}: I hear you. I am assessing threats and defending the village now.`
+        : `${minion.name}: I hear you. I will handle that and report back in chat.`;
+      try { await callMc(['chat', reply], apiUrl); rememberTeamChat(minion.name, reply); } catch {}
+    }
+    const urgent = survivalAction(status);
+    if (urgent) {
+      try {
+        const out = await callMc(parseCommand(urgent).slice(1), apiUrl);
+        entry.ticks += 1;
+        entry.last_action = `${urgent} -> ${out.slice(0, 180)} | priority survival`;
+      } catch (err) { entry.last_action = `${urgent} -> ERROR ${err.message} | priority survival`; }
+      return;
+    }
     const team = teamChat.slice(-10).map((m) => `<${m.from}> ${m.message}`).join('\n') || '(no controller team messages yet)';
     const observation = `STATUS:\n${status}\n\nCHAT:\n${chat}\n\nTEAM CHAT (reliable controller feed):\n${team}\n\nLAST ACTION: ${entry.last_action}`;
     entry.last_observation = observation;
