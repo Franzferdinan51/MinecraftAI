@@ -45,7 +45,7 @@ function serveStatic(req, res) {
   }
   fs.readFile(full, (err, data) => {
     if (err) { res.writeHead(404); res.end('not found'); return; }
-    res.writeHead(200, { 'content-type': MIME[path.extname(full)] || 'text/plain' });
+    res.writeHead(200, { 'content-type': MIME[path.extname(full)] || 'text/plain', 'cache-control': 'no-cache' });
     res.end(data);
   });
 }
