@@ -62,6 +62,24 @@ const handledHumanChat = new Map();
 // Shared eyes: every bot's nearbyPlayers feed one map, so a bot that cannot
 // see you can still walk to your last-seen coords (players unload beyond
 // render distance, so no single bot can track you alone).
+// Web-UI injection: messages sent from mission control arrive here and join
+// the same human-chat flow as in-game talk (same claims, replies, actions).
+// Optional `target` limits handling to one bot (a DM); otherwise all can claim.
+const injectedHuman = [];
+function injectHumanMessage(from, message, target = '') {
+  injectedHuman.push({ from, message, target, at: Date.now() });
+  while (injectedHuman.length > 50) injectedHuman.shift();
+}
+function takeInjectedHuman(minionName) {
+  const now = Date.now();
+  while (injectedHuman.length > 0 && now - injectedHuman[0].at > 600000) injectedHuman.shift();
+  return injectedHuman
+    .filter((m) => !m.target || m.target === minionName)
+    .map((m) => ({ from: m.from, message: m.message, ago: `${Math.round((now - m.at) / 1000)}s` }));
+}
+// Shared eyes: every bot's nearbyPlayers feed one map, so a bot that cannot
+// see you can still walk to your last-seen coords (players unload beyond
+// render distance, so no single bot can track you alone).
 const playerSightings = new Map();
 // Anti-spam: public chat is team-shared and rate-limited. Whispers are always
 // allowed; public barks require per-bot + team cooldowns. Direct REPLIES to a
@@ -595,7 +613,8 @@ async function tick(minion) {
     const botNames = minions.map((m) => m.name);
     // The raw read_chat API retains old entries forever. Feed the model only
     // current human messages; controller teamChat remains its bot coordination feed.
-    const freshHumanMessages = humanMessages(status, botNames);
+    // Web-UI injections join the same flow (targeted DMs only reach their bot).
+    const freshHumanMessages = [...takeInjectedHuman(minion.name), ...humanMessages(status, botNames)];
     const chat = freshHumanMessages.map((m) => `<${m.from}> ${m.message}`).join('\n') || '(no new player chat)';
     const human = freshHumanMessages.find((m) => canClaimHumanMessage(minion.name, m.message, botNames) && rememberHumanMessage(minion.name, m));
     if (human) {
@@ -772,6 +791,27 @@ for (const m of minions) {
 }
 
 const server = http.createServer((req, res) => {
+  // Mission-control injection: POST /say {"from":"Duckets (web)","message":"...","target":"Steve"}
+  if (req.method === 'POST' && req.url === '/say') {
+    let raw = '';
+    req.on('data', (c) => { raw += c; if (raw.length > 4000) req.destroy(); });
+    req.on('end', () => {
+      try {
+        const body = JSON.parse(raw || '{}');
+        if (!body.message) throw new Error('missing message');
+        const from = String(body.from || 'Duckets (web)').slice(0, 40);
+        const target = String(body.target || '').slice(0, 20);
+        if (target && !minions.some((m) => m.name === target)) throw new Error(`unknown bot "${target}"`);
+        injectHumanMessage(from, String(body.message).slice(0, 500), target);
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, queued: true, target: target || 'all' }));
+      } catch (err) {
+        res.writeHead(400, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: err.message }));
+      }
+    });
+    return;
+  }
   if (req.url === '/' || req.url === '/health') {
     const body = {
       ok: true,

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HermesCraft Mission Control</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="app">
+  <!-- far-left guild rail -->
+  <nav id="rail">
+    <div class="guild active" title="HermesCraft">H</div>
+    <div class="rail-sep"></div>
+    <div id="dm-rail"></div>
+  </nav>
+  <!-- channels -->
+  <aside id="channels">
+    <header>HermesCraft</header>
+    <div class="chan-group">TEXT CHANNELS</div>
+    <div class="chan active" data-view="global"><span class="hash">#</span>global-chat</div>
+    <div class="chan-group">DIRECT MESSAGES</div>
+    <div id="dm-list"></div>
+    <div class="chan-group">VILLAGE</div>
+    <div class="chan" data-view="status"><span class="hash">#</span>bot-status</div>
+    <div id="me"><div class="avatar" style="--c:#faa81a">D</div><div><b>Duckets</b><span>commander</span></div></div>
+  </aside>
+  <!-- main -->
+  <main id="main">
+    <header id="chan-head"><span class="hash">#</span><b id="chan-name">global-chat</b><span id="chan-topic">everything said in the world, live</span></header>
+    <div id="messages"></div>
+    <div id="status-cards"></div>
+    <form id="composer"><input id="input" autocomplete="off" placeholder="Message #global-chat — bots hear you like in-game chat"><button type="submit">Send</button></form>
+  </main>
+  <!-- members -->
+  <aside id="members">
+    <div class="chan-group">BOTS — <span id="online-count">0</span></div>
+    <div id="member-list"></div>
+    <div class="chan-group">BOT CARE</div>
+    <div id="care">
+      <div id="care-name">select a bot</div>
+      <div id="care-btns">
+        <button data-op="eat">🍖 Eat</button>
+        <button data-op="sleep">🛏 Sleep</button>
+        <button data-op="yard">🏠 Yard</button>
+        <button data-op="stop">⏹ Stop</button>
+        <button data-op="inventory">🎒 Bags</button>
+      </div>
+      <div id="care-out"></div>
+    </div>
+  </aside>
+</div>
+<div id="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>
