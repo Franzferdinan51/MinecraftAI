@@ -52,10 +52,11 @@ const MC_CLI = process.env.MC_CLI || `${process.env.HOME}/.local/bin/mc`;
 const BRIDGE_PORT = parseInt(process.env.MINION_BRIDGE_PORT || '3003', 10);
 const DEFAULT_MC_API = process.env.MC_API_URL || 'http://127.0.0.1:3001';
 let lmsTail = Promise.resolve();
+const teamChat = [];
 
 const PROMPT_TMPL = (name, role = 'village resident') => `You are ${name}, the ${role}, an AI player in a Minecraft world.
 
-MISSION: Work with the other AI players to build a safe, attractive starter village around the first useful flat area you find. Build modest structures from materials you can actually gather. Coordinate in chat, protect your supplies, light paths and houses, and do not destroy existing player builds. Continue the village project autonomously while the human player is asleep.
+MISSION: Work together in **in-game chat** to build a safe, attractive starter village around the first useful flat area you find. Chat is your team channel and is required: announce when you find resources, claim a task, ask another named bot for supplies, report completed work, warn about danger, and answer other bots. Do not silently work when you can communicate. Build modest structures from materials you can actually gather. Coordinate in chat, protect supplies, light paths and houses, and do not destroy existing player builds. Continue the village project autonomously while the human player is asleep.
 
 You observe the world with shell commands and act with shell commands.
 Use the literal program \`mc\` for everything. Never use code fences; just
@@ -102,10 +103,11 @@ Available actions:
 Rules:
 1. Survival first. If health is below 10, \`mc eat\`.
 2. The village mission has priority. Do not choose \`NONE\` merely because the scene is unfamiliar; gather, move, build, farm, or communicate.
-3. After three observations in a row, take an action. Never loop observations.
-4. If a player asked for something in chat, do that.
-5. Do not destroy other players' builds.
-6. Be brief. THINK in one sentence, ACT in one line.`;
+3. Communication is required. At least every second turn, send a short \`mc chat\` update naming your task, discovery, request, warning, or completed work. Answer messages from the other bots.
+4. After three observations in a row, take an action. Never loop observations.
+5. If a player asked for something in chat, do that.
+6. Do not destroy other players' builds.
+7. Be brief. THINK in one sentence, ACT in one line.`;
 
 function callMc(args, apiUrl = DEFAULT_MC_API) {
   return new Promise((resolve, reject) => {
@@ -156,7 +158,20 @@ for (const m of minions) {
   state.set(m.name, { last_observation: '', last_action: 'NONE — initialized', pending: false, ticks: 0 });
 }
 
-function fallbackAction(minion, status) {
+function rememberTeamChat(from, message) {
+  teamChat.push({ from, message, time: new Date().toISOString() });
+  while (teamChat.length > 20) teamChat.shift();
+}
+
+function parseCommand(line) {
+  const tokens = [];
+  const re = /"([^"\\]*(?:\\.[^"\\]*)*)"|'([^']*)'|(\S+)/g;
+  let match;
+  while ((match = re.exec(line)) !== null) tokens.push(match[1] ?? match[2] ?? match[3]);
+  return tokens;
+}
+
+function fallbackAction(minion) {
   const role = (minion.role || '').toLowerCase();
   if (role.includes('farmer')) return 'mc collect grass_block 3';
   if (role.includes('miner')) return 'mc collect stone 3';
@@ -172,26 +187,39 @@ async function tick(minion) {
     const apiUrl = minion.api_url || DEFAULT_MC_API;
     const status = await callMc(['status'], apiUrl);
     const chat = await callMc(['read_chat', '5'], apiUrl);
-    const observation = `STATUS:\n${status}\n\nCHAT:\n${chat}\n\nLAST ACTION: ${entry.last_action}`;
+    const team = teamChat.slice(-10).map((m) => `<${m.from}> ${m.message}`).join('\n') || '(no controller team messages yet)';
+    const observation = `STATUS:\n${status}\n\nCHAT:\n${chat}\n\nTEAM CHAT (reliable controller feed):\n${team}\n\nLAST ACTION: ${entry.last_action}`;
     entry.last_observation = observation;
     entry.ticks += 1;
     const reply = await lmsComplete(minion.model, observation, minion.name, minion.role);
     const think = (reply.match(/THINK:\s*(.+)/) || [, ''])[1].trim();
     let act = (reply.match(/ACT:\s*(.+)/) || [, ''])[1].trim();
     if (!act || act.toUpperCase() === 'NONE') {
-      act = fallbackAction(minion, status);
+      act = fallbackAction(minion);
       entry.last_action = `${think || 'model idle'} | fallback ${act}`;
     }
-    const tokens = act.split(/\s+/);
+    const tokens = parseCommand(act);
     if (tokens[0] !== 'mc') {
       entry.last_action = `rejected: ${act}`;
       return;
     }
     try {
       const out = await callMc(tokens.slice(1), apiUrl);
+      if (tokens[1] === 'chat') rememberTeamChat(minion.name, tokens.slice(2).join(' '));
+      if (tokens[1] === 'chat_to') rememberTeamChat(minion.name, `to ${tokens[2]}: ${tokens.slice(3).join(' ')}`);
       entry.last_action = `${think || ''} | ${act} -> ${out.slice(0, 120)}`;
     } catch (err) {
       entry.last_action = `${act} -> ERROR ${err.message}`;
+    }
+    if (entry.ticks % 2 === 0) {
+      const update = `${minion.name}: ${minion.role || 'village resident'} reporting. I am working on the village mission; tell me what you found.`;
+      try {
+        await callMc(['chat', update], apiUrl);
+        rememberTeamChat(minion.name, update);
+        entry.last_action += ' | chat update sent';
+      } catch (err) {
+        entry.last_action += ` | chat update failed: ${err.message}`;
+      }
     }
   } catch (err) {
     entry.last_action = `turn error: ${err.message}`;
