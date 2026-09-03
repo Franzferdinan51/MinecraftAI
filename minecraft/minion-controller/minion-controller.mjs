@@ -59,6 +59,10 @@ let lmsQueueDepth = 0;
 const teamChat = [];
 let villageCenter = null;
 const handledHumanChat = new Map();
+// Shared eyes: every bot's nearbyPlayers feed one map, so a bot that cannot
+// see you can still walk to your last-seen coords (players unload beyond
+// render distance, so no single bot can track you alone).
+const playerSightings = new Map();
 // Anti-spam: public chat is team-shared and rate-limited. Whispers are always
 // allowed; public barks require per-bot + team cooldowns.
 const lastPublicChatByBot = new Map();
@@ -81,7 +85,7 @@ MISSION: Build a safe starter village with the other players. Follow this loop f
 
 DETAILED GAMEPLAY: Minecraft is a survival game. Look around, move deliberately, collect drops, use crafting recipes, make tools before mining, eat when hungry, avoid falls and hostile mobs, sleep or shelter at night, and return to the village area after scouting. Builders gather logs, convert logs to planks, and place walls/floors/roofs. Farmers gather grass/seeds and food, plant and harvest crops, and share food. Miners gather stone, coal, iron and useful ores and report locations. Scouts check terrain and danger, escort teammates, light paths, and defend the village. Claim tasks in chat so two bots do not duplicate work. Use only materials you possess and never grief existing player builds.
 
-ACTION PRIORITIES: (1) When a hostile is close, equip the best weapon available, fight if healthy, or flee and warn the team if injured. (2) When safe, eat if hungry; craft planks from logs, then crafting tools, weapons, food and torches when materials permit. (3) Builders must turn planks into an actual shelter, paths, storage or defensive walls, not just carry resources. (4) Farmers keep food and seeds available. (5) Miners supply stone/ores. (6) Scouts light and defend routes. After every completed action, report useful results and choose the next physical task—never remain idle.
+ACTION PRIORITIES: (1) When a hostile is close, equip the best weapon available, fight if healthy, or flee and warn the team if injured. (2) When safe, eat if hungry; craft planks from logs, then crafting tools, weapons, food and torches when materials permit. Cook raw food and smelt ores with mc smelt ITEM whenever a furnace is near; miners with 8+ cobblestone craft a furnace at a crafting table and place one at the yard. (3) Builders must turn planks into an actual shelter, paths, storage or defensive walls, not just carry resources. (4) Farmers keep food and seeds available. (5) Miners supply stone/ores. (6) Scouts light and defend routes. After every completed action, report useful results and choose the next physical task—never remain idle.
 
 You observe the world with shell commands and act with shell commands.
 Use the literal program \`mc\` for everything. Never use code fences; just
@@ -128,9 +132,9 @@ Available actions:
 Rules:
 1. SURVIVAL OVERRIDES EVERYTHING: if a hostile mob is close, fight it when healthy and equipped, otherwise flee; if health is low, eat or flee to safety; never continue gathering while being attacked.
 2. PROTECT PLAYER BUILDS — fences, walls, paths, crops, chests, doors, torches, and decorations that any player placed are theirs. Do NOT dig, break, or replace them. ENTER THROUGH DOORS AND GATES ONLY: never break a wall, fence, or door to get inside; if a door is closed, wait outside or ask the player to open it. Do not walk through fences or crops. Stay at your yard spot outside the house unless the player invites you in. Never run \`mc dig\` or \`mc collect\` within 8 blocks of the house (50,63,85).
-3. Treat every \`Human request ... assigned to NAME\` message in TEAM CHAT as a shared team plan. If NAME is you, acknowledge it in chat and make your next physical action advance that request; if another teammate is assigned, choose a supporting task and report what you can contribute.
+3. Treat every \`Human request to NAME ...\` / \`Human question to ALL ...\` message in TEAM CHAT as a shared team plan. If NAME is you (or ALL), acknowledge it in chat and make your next physical action advance that request; if another teammate is named, choose a supporting task and report what you can contribute.
 4. The village mission has priority. Do not choose \`NONE\` or an observation command as your turn; take a movement, gathering, crafting, building, defense, food, or communication action.
-5. Communication is required at least every second turn: claim tasks, report discoveries/resources, request supplies, warn of danger, and report completed work.
+5. Communication is required at least every second turn: claim tasks, report discoveries/resources, request supplies, warn of danger, and report completed work. If a human names one specific player, only that player answers and acts — everyone else stays silent and keeps working. To find a player you cannot see, walk to their KNOWN PLAYER POSITION coords with mc goto_near, then mc follow <name> once close.
 6. Follow the gameplay loop: observe once, decide, act, verify the result, then continue. Never loop observations or stand still.
 7. Be brief. THINK in one sentence, ACT in one line.`;
 
@@ -278,6 +282,38 @@ function rememberHumanMessage(minionName, message) {
   return true;
 }
 
+// Name-gating: "Reed come here" is for Reed only — the rest stay silent and
+// keep working. Unnamed messages ("anyone have wood?") stay shared.
+function namedMinions(message, botNames) {
+  const text = (message || '').toLowerCase();
+  return (botNames || []).filter((n) => text.includes(String(n).toLowerCase()));
+}
+function canClaimHumanMessage(minionName, message, botNames) {
+  const named = namedMinions(message, botNames);
+  return named.length === 0 || named.includes(minionName);
+}
+
+// Shared player tracking. Record every visible player per tick; report
+// sightings fresher than 5 minutes as walkable coords.
+function updatePlayerSightings(sightings, minionName, statusJson, now = Date.now()) {
+  try {
+    const players = JSON.parse(statusJson).data?.nearbyPlayers || [];
+    for (const p of players) {
+      if (!p.name || !p.position) continue;
+      sightings.set(p.name, {
+        x: Math.floor(p.position.x), y: Math.floor(p.position.y), z: Math.floor(p.position.z),
+        by: minionName, at: now,
+      });
+    }
+  } catch {}
+}
+function playerSightingLine(sightings, now = Date.now()) {
+  const fresh = [...sightings.entries()].filter(([, s]) => now - s.at <= 300000);
+  if (fresh.length === 0) return '';
+  return 'KNOWN PLAYER POSITIONS (shared eyes — walk to these coords with mc goto_near to find them): ' +
+    fresh.map(([name, s]) => `${name} last seen at ${s.x},${s.y},${s.z} by ${s.by} ${Math.round((now - s.at) / 1000)}s ago`).join('; ');
+}
+
 // Short truthful progress line so chatter describes real work, not canned spam.
 function progressSummary(minion, statusJson, lastAction = '') {
   let d = {};
@@ -358,7 +394,42 @@ function coordinatedAction(minion, statusJson, lastAction, tick) {
   return regroupAction(minion, statusJson, villageCenter) || fallbackAction(minion, statusJson, lastAction, tick);
 }
 
+// Furnace workflow, cherry-picked from yuniko-software/minecraft-mcp-server's
+// smelt-item tool design (Apache-2.0): the bot API auto-selects fuel from
+// inventory and waits for output, so the controller only has to notice
+// "raw material + furnace nearby". Cooks raw food when hungry (or when the
+// kitchen has nothing ready), smelts ores otherwise, and has miners/builders
+// prepare a furnace at a crafting table when they hold 8+ cobblestone.
+function furnaceAction(minion, statusJson) {
+  const SMELT_FOOD = ['raw_porkchop', 'raw_beef', 'raw_chicken', 'raw_mutton', 'raw_rabbit', 'raw_salmon', 'raw_cod', 'potato'];
+  const SMELT_ORE = ['raw_iron', 'raw_gold', 'raw_copper'];
+  const COOKED_FOOD = /cooked_|baked_potato|bread|apple|carrot|steak|porkchop|chicken|mutton|salmon|fish|stew|melon|cookie|pumpkin_pie/i;
+  let parsed = {};
+  try { parsed = JSON.parse(statusJson); } catch { return ''; }
+  const data = parsed.data || {};
+  const seen = [...(data.scene?.visible_block_hits || []), ...(data.notableBlocks || [])].map((b) => b.name);
+  const inv = Object.fromEntries((data.inventory || []).map((i) => [i.name, i.count]));
+  if (seen.includes('furnace') || seen.includes('lit_furnace')) {
+    const rawFood = SMELT_FOOD.find((n) => inv[n] > 0);
+    const hasCooked = (data.inventory || []).some((i) => COOKED_FOOD.test(i.name) && i.count > 0);
+    if (rawFood && ((data.food ?? 20) < 14 || !hasCooked)) return `mc smelt ${rawFood}`;
+    const ore = SMELT_ORE.find((n) => inv[n] > 0);
+    if (ore) return `mc smelt ${ore}`;
+    return '';
+  }
+  // No furnace in sight: miners/builders holding 8+ cobblestone prepare one
+  // at a nearby crafting table instead of wandering. Placement stays
+  // model-driven via mc place_fill at the yard.
+  if ((inv.cobblestone || 0) >= 8 && !inv.furnace && seen.includes('crafting_table')) {
+    const role = (minion.role || '').toLowerCase();
+    if (role.includes('miner') || role.includes('builder') || role.includes('planner')) return 'mc craft furnace';
+  }
+  return '';
+}
+
 function fallbackAction(minion, statusJson, lastAction = '', tick = 0) {
+  const furnace = furnaceAction(minion, statusJson);
+  if (furnace) return furnace;
   let parsed = {};
   try { parsed = JSON.parse(statusJson); } catch {}
   const data = parsed.data || {};
@@ -451,6 +522,7 @@ async function tick(minion) {
     const apiUrl = minion.api_url || DEFAULT_MC_API;
     const status = await callMc(['status', '--json'], apiUrl);
     updateVillageCenter(minion, status);
+    updatePlayerSightings(playerSightings, minion.name, status);
     if (stuckNudge(entry, status) === 'STUCK') {
       try { await fetch(`${apiUrl}/task/cancel`, { method: 'POST' }); } catch {}
       try {
@@ -463,9 +535,12 @@ async function tick(minion) {
     // current human messages; controller teamChat remains its bot coordination feed.
     const freshHumanMessages = humanMessages(status, botNames);
     const chat = freshHumanMessages.map((m) => `<${m.from}> ${m.message}`).join('\n') || '(no new player chat)';
-    const human = freshHumanMessages.find((m) => rememberHumanMessage(minion.name, m));
+    const human = freshHumanMessages.find((m) => canClaimHumanMessage(minion.name, m.message, botNames) && rememberHumanMessage(minion.name, m));
     if (human) {
-      const teamRequest = `Human question to ALL, answered by ${minion.name}: ${human.message}`;
+      const named = namedMinions(human.message, botNames);
+      const teamRequest = named.length > 0
+        ? `Human request to ${named.join('+')}, handled by ${minion.name}: ${human.message}`
+        : `Human question to ALL, answered by ${minion.name}: ${human.message}`;
       rememberTeamChat('PLAN', teamRequest);
       const directAction = directRequestAction(human.message, human.from);
       if (directAction) {
@@ -520,7 +595,8 @@ async function tick(minion) {
     }
     const team = teamChat.slice(-10).map((m) => `<${m.from}> ${m.message}`).join('\n') || '(no controller team messages yet)';
     const center = villageCenter ? `${villageCenter.x}, ${villageCenter.y}, ${villageCenter.z}` : 'not established yet';
-    const observation = `VILLAGE CENTER (stay within about 16 blocks unless scouting): ${center}\n\nSTATUS:\n${status}\n\nCHAT:\n${chat}\n\nTEAM CHAT (reliable controller feed):\n${team}\n\nLAST ACTION: ${entry.last_action}`;
+    const sightings = playerSightingLine(playerSightings);
+    const observation = `VILLAGE CENTER (stay within about 16 blocks unless scouting): ${center}\n${sightings ? sightings + '\n' : ''}\nSTATUS:\n${status}\n\nCHAT:\n${chat}\n\nTEAM CHAT (reliable controller feed):\n${team}\n\nLAST ACTION: ${entry.last_action}`;
     entry.last_observation = observation;
     entry.ticks += 1;
     const reply = await lmsComplete(minion.model, observation, minion.name, minion.role);

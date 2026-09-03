@@ -35,8 +35,10 @@ const houseHelpers = `const HOUSE = { x: 50, y: 63, z: 85 };
 const HOUSE_SAFE_RADIUS = 8;
 ${functionSource('houseRally')}
 ${functionSource('nearHouse')};`;
-const fallbackAction = loadFunction('fallbackAction', houseHelpers);
-const recoveryAfterFailedAction = loadFunction('recoveryAfterFailedAction', `${houseHelpers}\nconst fallbackAction = ${fallbackAction.toString()};`);
+const furnaceAction = loadFunction('furnaceAction');
+const furnaceDep = `\nconst furnaceAction = ${furnaceAction.toString()};`;
+const fallbackAction = loadFunction('fallbackAction', `${houseHelpers}${furnaceDep}`);
+const recoveryAfterFailedAction = loadFunction('recoveryAfterFailedAction', `${houseHelpers}${furnaceDep}\nconst fallbackAction = ${fallbackAction.toString()};`);
 const blockedGatherStatus = JSON.stringify({
   data: {
     position: { x: 0, y: 70, z: 0 },
@@ -178,7 +180,7 @@ assert.equal(
   'background work must not overlap another command for the same minion',
 );
 
-const queuedFallbackAction = loadFunction('queuedFallbackAction', `${houseHelpers}\nconst fallbackAction = ${fallbackAction.toString()};`);
+const queuedFallbackAction = loadFunction('queuedFallbackAction', `${houseHelpers}${furnaceDep}\nconst fallbackAction = ${fallbackAction.toString()};`);
 assert.equal(
   queuedFallbackAction({ role: 'house builder and path maker' }, blockedGatherStatus, 'NONE', 5, 1),
   'mc goto_near 8 70 0',
@@ -212,6 +214,114 @@ assert.deepEqual(
   ] } }), ['Steve', 'Reed', 'Moss', 'Flint', 'Ember']),
   [{ from: 'Alex', message: 'please build a shelter' }],
   'messages from every non-bot player must be treated as human requests, not only one username',
+);
+
+// Furnace workflow (cherry-picked from minecraft-mcp-server smelt-item design).
+const hungryCookStatus = JSON.stringify({
+  data: {
+    position: { x: 44, y: 63, z: 85 },
+    food: 8,
+    inventory: [{ name: 'raw_porkchop', count: 3 }, { name: 'coal', count: 2 }],
+    scene: { visible_block_hits: [{ name: 'furnace', position: { x: 45, y: 63, z: 85 } }] },
+    notableBlocks: [],
+  },
+});
+assert.equal(
+  furnaceAction({ role: 'farmer and food keeper' }, hungryCookStatus),
+  'mc smelt raw_porkchop',
+  'a hungry bot with raw food near a furnace must cook instead of wandering',
+);
+const oreSmeltStatus = JSON.stringify({
+  data: {
+    position: { x: 44, y: 63, z: 85 },
+    food: 18,
+    inventory: [{ name: 'bread', count: 2 }, { name: 'raw_iron', count: 4 }, { name: 'oak_planks', count: 5 }],
+    scene: { visible_block_hits: [] },
+    notableBlocks: [{ name: 'lit_furnace', position: { x: 45, y: 63, z: 85 } }],
+  },
+});
+assert.equal(
+  furnaceAction({ role: 'miner and resource gatherer' }, oreSmeltStatus),
+  'mc smelt raw_iron',
+  'a fed miner with raw ore near a lit furnace must smelt it',
+);
+assert.equal(
+  furnaceAction({ role: 'miner and resource gatherer' }, blockedGatherStatus),
+  '',
+  'no furnace and no cobblestone means no furnace task',
+);
+const furnacePrepStatus = JSON.stringify({
+  data: {
+    position: { x: 0, y: 70, z: 0 },
+    food: 20,
+    inventory: [{ name: 'cobblestone', count: 9 }],
+    scene: { visible_block_hits: [{ name: 'crafting_table', position: { x: 1, y: 70, z: 0 } }] },
+    notableBlocks: [],
+  },
+});
+assert.equal(
+  furnaceAction({ role: 'miner and resource gatherer' }, furnacePrepStatus),
+  'mc craft furnace',
+  'a miner with 8+ cobblestone at a crafting table must prepare a furnace',
+);
+assert.equal(
+  fallbackAction({ role: 'farmer and food keeper' }, hungryCookStatus, 'NONE', 5),
+  'mc smelt raw_porkchop',
+  'the fallback chain must prefer cooking over gathering when a furnace is near',
+);
+
+// Name-gating: a message naming one bot belongs to that bot alone.
+const namedMinions = loadFunction('namedMinions');
+const canClaimHumanMessage = loadFunction('canClaimHumanMessage', `\nconst namedMinions = ${namedMinions.toString()};`);
+const BOT_NAMES = ['Steve', 'Reed', 'Moss', 'Flint', 'Ember'];
+assert.deepEqual(
+  namedMinions('Reed come here please', BOT_NAMES),
+  ['Reed'],
+  'a message naming Reed must resolve to Reed only',
+);
+assert.deepEqual(
+  namedMinions('does anyone have wood?', BOT_NAMES),
+  [],
+  'an unnamed message must resolve to nobody so the shared behavior applies',
+);
+assert.equal(
+  canClaimHumanMessage('Steve', 'Reed come here please', BOT_NAMES),
+  false,
+  'Steve must not claim a message addressed to Reed',
+);
+assert.equal(
+  canClaimHumanMessage('Reed', 'Reed come here please', BOT_NAMES),
+  true,
+  'Reed must claim a message addressed to Reed',
+);
+assert.equal(
+  canClaimHumanMessage('Moss', 'does anyone have wood?', BOT_NAMES),
+  true,
+  'unnamed messages stay shared so every bot can answer',
+);
+
+// Shared player tracking: sightings become walkable coords, stale ones drop.
+const updatePlayerSightings = loadFunction('updatePlayerSightings');
+const playerSightingLine = loadFunction('playerSightingLine');
+const sightings = new Map();
+const seenStatus = JSON.stringify({
+  data: { nearbyPlayers: [{ name: 'Duckets', distance: 6, position: { x: 50.7, y: 63, z: 85.2 } }] },
+});
+updatePlayerSightings(sightings, 'Reed', seenStatus, 1000000);
+const line = playerSightingLine(sightings, 1040000);
+assert.ok(
+  line.includes('Duckets last seen at 50,63,85 by Reed'),
+  'a fresh sighting must render as walkable coords with the spotting bot',
+);
+assert.equal(
+  playerSightingLine(sightings, 1000000 + 300001),
+  '',
+  'sightings older than 5 minutes must expire so bots stop walking to ghosts',
+);
+assert.equal(
+  playerSightingLine(new Map()),
+  '',
+  'no sightings means no tracking line in the observation',
 );
 
 console.log('minion-controller regression tests: PASS');
