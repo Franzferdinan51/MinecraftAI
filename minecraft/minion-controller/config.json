@@ -1,7 +1,7 @@
 [
-  { "name": "Steve",  "model": "ornith-1.5-9b", "interval_ms": 12000, "api_url": "http://127.0.0.1:3011" },
-  { "name": "Reed",   "model": "ornith-1.5-9b", "interval_ms": 14000, "api_url": "http://127.0.0.1:3012" },
-  { "name": "Moss",   "model": "ornith-1.5-9b", "interval_ms": 16000, "api_url": "http://127.0.0.1:3013" },
-  { "name": "Flint",  "model": "ornith-1.5-9b", "interval_ms": 18000, "api_url": "http://127.0.0.1:3014" },
-  { "name": "Ember",  "model": "ornith-1.5-9b", "interval_ms": 20000, "api_url": "http://127.0.0.1:3015" }
+  { "name": "Steve",  "role": "village planner and carpenter", "model": "ornith-1.5-9b", "interval_ms": 30000, "api_url": "http://127.0.0.1:3011" },
+  { "name": "Reed",   "role": "house builder and path maker", "model": "ornith-1.5-9b", "interval_ms": 36000, "api_url": "http://127.0.0.1:3012" },
+  { "name": "Moss",   "role": "farmer and food keeper", "model": "ornith-1.5-9b", "interval_ms": 42000, "api_url": "http://127.0.0.1:3013" },
+  { "name": "Flint",  "role": "miner and resource gatherer", "model": "ornith-1.5-9b", "interval_ms": 48000, "api_url": "http://127.0.0.1:3014" },
+  { "name": "Ember",  "role": "scout, defender, and torch keeper", "model": "ornith-1.5-9b", "interval_ms": 54000, "api_url": "http://127.0.0.1:3015" }
 ]

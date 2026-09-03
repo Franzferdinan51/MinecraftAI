@@ -51,8 +51,11 @@ const LMS_URL = (process.env.LMS_URL || 'http://127.0.0.1:1234/v1').replace(/\/$
 const MC_CLI = process.env.MC_CLI || `${process.env.HOME}/.local/bin/mc`;
 const BRIDGE_PORT = parseInt(process.env.MINION_BRIDGE_PORT || '3003', 10);
 const DEFAULT_MC_API = process.env.MC_API_URL || 'http://127.0.0.1:3001';
+let lmsTail = Promise.resolve();
 
-const PROMPT_TMPL = (name) => `You are ${name}, an AI player in a Minecraft world.
+const PROMPT_TMPL = (name, role = 'village resident') => `You are ${name}, the ${role}, an AI player in a Minecraft world.
+
+MISSION: Work with the other AI players to build a safe, attractive starter village around the first useful flat area you find. Build modest structures from materials you can actually gather. Coordinate in chat, protect your supplies, light paths and houses, and do not destroy existing player builds. Continue the village project autonomously while the human player is asleep.
 
 You observe the world with shell commands and act with shell commands.
 Use the literal program \`mc\` for everything. Never use code fences; just
@@ -119,14 +122,20 @@ function callMc(args, apiUrl = DEFAULT_MC_API) {
   });
 }
 
-async function lmsComplete(model, observation) {
+async function lmsComplete(model, observation, name, role) {
+  const run = lmsTail.then(() => lmsCompleteUnlocked(model, observation, name, role));
+  lmsTail = run.catch(() => {});
+  return run;
+}
+
+async function lmsCompleteUnlocked(model, observation, name, role) {
   const res = await fetch(`${LMS_URL}/chat/completions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       model,
       messages: [
-        { role: 'system', content: PROMPT_TMPL(model.includes('/') ? model.split('/').pop() : model) },
+        { role: 'system', content: PROMPT_TMPL(name, role) },
         { role: 'user', content: observation },
       ],
       max_tokens: 200,
@@ -157,7 +166,7 @@ async function tick(minion) {
     const observation = `STATUS:\n${status}\n\nCHAT:\n${chat}\n\nLAST ACTION: ${entry.last_action}`;
     entry.last_observation = observation;
     entry.ticks += 1;
-    const reply = await lmsComplete(minion.model, observation);
+    const reply = await lmsComplete(minion.model, observation, minion.name, minion.role);
     const think = (reply.match(/THINK:\s*(.+)/) || [, ''])[1].trim();
     const act = (reply.match(/ACT:\s*(.+)/) || [, ''])[1].trim();
     if (!act || act.toUpperCase() === 'NONE') {
