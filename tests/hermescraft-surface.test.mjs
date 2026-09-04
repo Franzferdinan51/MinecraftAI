@@ -63,6 +63,9 @@ test('hermescraft core: all upstream modes are cataloged and Mission Control exp
   const modes = JSON.parse(read(join(hc, 'modes.json')));
   assert.deepEqual(modes.modes.map((m) => m.id), ['companion', 'landfolk', 'civilization', 'minecraft', 'play']);
   assert.equal(modes.fleet.length, 6);
+  assert.ok(modes.command_surface.observe.includes('scene'));
+  assert.ok(modes.command_surface.act.includes('fill'));
+  assert.ok(modes.command_surface.social.includes('whisper'));
   for (const id of ['companion', 'landfolk', 'civilization']) {
     assert.ok(existsSync(join(hc, modes.modes.find((m) => m.id === id).config)), `${id} config missing`);
   }

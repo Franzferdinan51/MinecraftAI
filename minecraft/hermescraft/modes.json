@@ -96,5 +96,91 @@
     "machine_enforced_by": "minecraft/intelligence/contracts.mjs",
     "approval_gateway": "minecraft/intelligence/authority-gateway.mjs",
     "notes": "No unrestricted shell, filesystem, credentials, arbitrary RCON, or omniscient x-ray."
+  },
+  "command_surface": {
+    "observe": [
+      "status",
+      "health",
+      "inventory",
+      "nearby",
+      "look",
+      "map",
+      "scene",
+      "social",
+      "read_chat",
+      "overhear",
+      "furnaces",
+      "deaths",
+      "stats",
+      "marks",
+      "fair_play",
+      "screenshot_meta"
+    ],
+    "act": [
+      "goto",
+      "goto_near",
+      "bg_goto",
+      "collect",
+      "bg_collect",
+      "dig",
+      "place",
+      "fill",
+      "craft",
+      "smelt",
+      "eat",
+      "sleep",
+      "follow",
+      "flee",
+      "fight",
+      "attack",
+      "shield",
+      "shoot",
+      "sprint_attack",
+      "strafe",
+      "sneak",
+      "toss",
+      "use",
+      "interact",
+      "pickup",
+      "wait",
+      "stop"
+    ],
+    "social": [
+      "chat",
+      "whisper",
+      "team_chat",
+      "rally",
+      "report",
+      "set_team"
+    ],
+    "world_state": [
+      "chest",
+      "deposit",
+      "withdraw",
+      "furnace_check",
+      "furnace_take",
+      "mark",
+      "go_mark",
+      "unmark",
+      "find_blocks",
+      "find_entities",
+      "recipes",
+      "commands"
+    ],
+    "fleet_extensions": [
+      "breed",
+      "door",
+      "fish",
+      "harvest",
+      "inspect",
+      "milk",
+      "shear",
+      "sow",
+      "till"
+    ]
+  },
+  "source_notes": {
+    "mc_cli": "minecraft/hermescraft uses the upstream mc command surface; live body implementation is the fixture-pinned 26.2 superset at $HOME/games/hermescraft/bin/mc.",
+    "modes": "Companion/Civilization/ Landfolk assets and configs are versioned under minecraft/hermescraft/modes/."
   }
 }

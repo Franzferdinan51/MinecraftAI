@@ -129,7 +129,8 @@ Companion, Civilization, Landfolk, Minecraft Core, and Play/Server
 flows are cataloged in `minecraft/hermescraft/modes.json`; Landfolk is
 the active six-agent fleet. The Mission Control **HermesCraft modes**
 view exposes this mapping, capabilities, provenance, and per-agent
-body/profile wiring without exposing secrets or offering an unsafe
+body/profile wiring, and the full grouped `mc` command surface
+(observation, actions, social, world state, and fleet extensions) without exposing secrets or offering an unsafe
 bulk launcher. The integrated behavior includes landfolk character
 craft, role skillbooks, inventory-first play, SUBMERGED recovery,
 one-line chat with whisper coordination, and a 3-observations-to-1-action loop.

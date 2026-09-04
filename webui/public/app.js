@@ -271,6 +271,7 @@ async function loadHermesCraft() {
       <p>${esc(m.description)}</p><code>${esc(m.upstream_entry)}</code>
     </article>`).join('');
     $('#mode-capabilities').innerHTML = (r.capabilities || []).map((x) => `<span class="capability">✓ ${esc(x)}</span>`).join('');
+    $('#mode-commands').innerHTML = Object.entries(r.command_surface || {}).map(([group, commands]) => `<div class="command-group"><b>${esc(group.replace(/_/g, ' '))}</b><div>${commands.map((x) => `<code>${esc(x)}</code>`).join('')}</div></div>`).join('');
     $('#mode-fleet').innerHTML = (r.fleet || []).map((b) => `<div class="fleet-agent"><span class="avatar" style="background:${botColor(b.name)}">${esc(b.name[0])}</span><div><b>${esc(b.name)}</b><span>${esc(b.role)} · body :${b.body_port} · ${esc(b.profile)}</span></div></div>`).join('');
   } catch (e) {
     cards.innerHTML = `<p class="hint">HermesCraft catalog unavailable: ${esc(e.message)}</p>`;
