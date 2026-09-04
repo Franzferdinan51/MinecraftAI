@@ -98,6 +98,7 @@ test('hermescraft catalog: mode cards include deployment summaries', () => {
   const app = read(join(root, 'webui/public/app.js'));
   assert.match(app, /deployment_summary/);
   assert.match(app, /agent_count/);
+  assert.match(app, /runtime_status/);
 });
 
 test('hermescraft mode detail: configured agents include live runtime status', () => {
