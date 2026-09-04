@@ -1,0 +1,51 @@
+[
+  {
+    "name": "Marcus",
+    "role": "leader / control drive",
+    "model": "ornith-1.5-9b",
+    "interval_ms": 45000,
+    "api_url": "http://127.0.0.1:3021"
+  },
+  {
+    "name": "Sarah",
+    "role": "caretaker / wants space",
+    "model": "ornith-1.5-9b",
+    "interval_ms": 45000,
+    "api_url": "http://127.0.0.1:3022"
+  },
+  {
+    "name": "Jin",
+    "role": "knowledge hoarder",
+    "model": "ornith-1.5-9b",
+    "interval_ms": 45000,
+    "api_url": "http://127.0.0.1:3023"
+  },
+  {
+    "name": "Dave",
+    "role": "approval-seeking talker",
+    "model": "ornith-1.5-9b",
+    "interval_ms": 45000,
+    "api_url": "http://127.0.0.1:3024"
+  },
+  {
+    "name": "Lisa",
+    "role": "scout / distrustful",
+    "model": "ornith-1.5-9b",
+    "interval_ms": 45000,
+    "api_url": "http://127.0.0.1:3025"
+  },
+  {
+    "name": "Tommy",
+    "role": "thief / loner",
+    "model": "ornith-1.5-9b",
+    "interval_ms": 45000,
+    "api_url": "http://127.0.0.1:3026"
+  },
+  {
+    "name": "Elena",
+    "role": "crisis authority",
+    "model": "ornith-1.5-9b",
+    "interval_ms": 45000,
+    "api_url": "http://127.0.0.1:3027"
+  }
+]

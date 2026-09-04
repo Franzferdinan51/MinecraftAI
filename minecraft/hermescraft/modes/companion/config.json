@@ -1,0 +1,9 @@
+[
+  {
+    "name": "Steve",
+    "role": "Minecraft companion and construction buddy",
+    "model": "ornith-1.5-9b",
+    "interval_ms": 30000,
+    "api_url": "http://127.0.0.1:3011"
+  }
+]

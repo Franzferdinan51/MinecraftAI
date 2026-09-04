@@ -9,21 +9,24 @@
       "name": "Companion Mode",
       "upstream_entry": "hermescraft.sh / start-steve.sh",
       "status": "supported",
-      "description": "One persistent Hermes agent as an in-world friend. Follow, gather, build, scout, fight/flee, remember."
+      "description": "One persistent Hermes agent as an in-world friend. Follow, gather, build, scout, fight/flee, remember.",
+      "config": "modes/companion/config.json"
     },
     {
       "id": "landfolk",
       "name": "Landfolk Mode",
       "upstream_entry": "landfolk.sh / scripts/run-landfolk-bots.sh",
       "status": "active",
-      "description": "The featured six-agent personal-world fleet: DuckBot leads Steve, Reed, Moss, Flint, and Ember."
+      "description": "The featured six-agent personal-world fleet: DuckBot leads Steve, Reed, Moss, Flint, and Ember.",
+      "config": "modes/landfolk/config.json"
     },
     {
       "id": "civilization",
       "name": "Civilization Mode",
       "upstream_entry": "civilization.sh",
       "status": "profile-ready",
-      "description": "Larger multi-agent society pattern with separate identities, public chat, DMs, overhearing, routines, and division of labor."
+      "description": "Larger multi-agent society pattern with separate identities, public chat, DMs, overhearing, routines, and division of labor.",
+      "config": "modes/civilization/config.json"
     },
     {
       "id": "minecraft",
