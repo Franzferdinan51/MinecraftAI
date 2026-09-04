@@ -20,6 +20,7 @@ touches the network, the filesystem, or a bot queue.
 | `learning-policy.mjs` | Procedural promotion needs 3 clean verified uses, a reproducible card, a review record, and explicit player approval. No self-promotion. |
 | `role-skillbook.mjs` | Per-bot active cards from the role registry; learned cards stay under `pendingReview` until approved. |
 | `safety-state.mjs` | `deriveSafetyState()`: deterministic hold/recovery derivation from vitals (health, food, death streak, water, hostiles, stuck, connection, pause). Recovery outranks model plans; missing vitals fail closed. Feeds the gateway's `botState` flags. |
+| `approvals-queue.mjs` | `createQueue()`: Tier 3 player-approval lifecycle (pending → approved/rejected/expired, single-use consume). Approved records match the exact shape `policy.mjs` checks. The deterministic producer for policy's approvals arrays. |
 
 ## Status
 
@@ -35,5 +36,5 @@ node --test tests/intelligence-contracts.test.mjs tests/intelligence-policy.test
   tests/intelligence-controller-integration.test.mjs tests/authority-gateway.test.mjs \
   tests/memory-store.test.mjs tests/learning-policy.test.mjs \
   tests/safety-state.test.mjs tests/overseer-contract.test.mjs \
-  tests/webui-intelligence-routes.test.mjs
+  tests/webui-intelligence-routes.test.mjs tests/approvals-queue.test.mjs
 ```
