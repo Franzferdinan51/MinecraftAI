@@ -67,7 +67,7 @@ function readBody(req) {
   });
 }
 
-function hermesCraftModeDetail(id) {
+async function hermesCraftModeDetail(id) {
   const mode = (HERMESCRAFT_MANIFEST.modes || []).find((m) => m.id === id);
   if (!mode) return null;
   let agents = [];
@@ -85,6 +85,10 @@ function hermesCraftModeDetail(id) {
     }
   }
   const readiness = modeReadiness().find((m) => m.id === id);
+  const runtime_status = await Promise.all(agents.filter((a) => a.port).map(async (a) => {
+    const live = await botFetch(a.port, '/health');
+    return { name: a.name, port: a.port, online: live.ok === true && live.connected === true };
+  }));
   return {
     id: mode.id,
     name: mode.name,
@@ -93,6 +97,7 @@ function hermesCraftModeDetail(id) {
     deployment_summary: {
       agents,
       agent_count: agents.length,
+      runtime_status,
       config_present: readiness?.config_present === true,
       launch_policy: readiness?.launch_policy || 'manual-review-required',
       activation: mode.id === 'civilization' ? 'requires seven isolated profiles and bodies' : mode.id === 'landfolk' ? 'uses the active six-body fleet' : 'requires deliberate operator review',
@@ -132,11 +137,12 @@ const server = http.createServer(async (req, res) => {
 
   // ── HermesCraft modes/capabilities: static, safe, no runtime secrets ──
   if (req.method === 'GET' && url.pathname === '/api/hermescraft') {
-    return json(res, 200, { ok: true, ...HERMESCRAFT_MANIFEST, mode_details: Object.fromEntries((HERMESCRAFT_MANIFEST.modes || []).map((m) => [m.id, hermesCraftModeDetail(m.id)])), readiness: await hermesCraftReadiness() });
+    const details = await Promise.all((HERMESCRAFT_MANIFEST.modes || []).map(async (m) => [m.id, await hermesCraftModeDetail(m.id)]));
+    return json(res, 200, { ok: true, ...HERMESCRAFT_MANIFEST, mode_details: Object.fromEntries(details), readiness: await hermesCraftReadiness() });
   }
   const modeDetailMatch = url.pathname.match(/^\/api\/hermescraft\/mode\/([a-z-]+)$/);
   if (req.method === 'GET' && modeDetailMatch) {
-    const detail = hermesCraftModeDetail(modeDetailMatch[1]);
+    const detail = await hermesCraftModeDetail(modeDetailMatch[1]);
     return detail ? json(res, 200, { ok: true, ...detail }) : json(res, 404, { ok: false, error: 'unknown HermesCraft mode' });
   }
   // ── state: one snapshot for the whole village ──

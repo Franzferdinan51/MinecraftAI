@@ -99,3 +99,10 @@ test('hermescraft catalog: mode cards include deployment summaries', () => {
   assert.match(app, /deployment_summary/);
   assert.match(app, /agent_count/);
 });
+
+test('hermescraft mode detail: configured agents include live runtime status', () => {
+  const server = read(join(root, 'webui/server.mjs'));
+  assert.match(server, /runtime_status/);
+  assert.match(server, /online/);
+  assert.match(server, /Promise\.all/);
+});
