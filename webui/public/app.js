@@ -318,6 +318,7 @@ function renderDash() {
         ${b.name === 'DuckBot' ? '<span class="role">pace + pause live in the bridge</span>' : `
         <select data-pace="${esc(b.name)}">${PACES.map(([ms, label]) => `<option value="${ms}" ${b.interval_ms === ms ? 'selected' : ''}>${label}</option>`).join('')}</select>
         <button class="pause-btn ${b.paused ? 'on' : ''}" data-pause="${esc(b.name)}" type="button">${b.paused ? '▶ Resume' : '⏸ Pause'}</button>
+        <button data-nudge="${esc(b.name)}" type="button" title="Observe, clear stale task, and safely restart village work">⚡ Nudge</button>
         <button data-quick="eat|${esc(b.name)}" type="button">🍖</button>
         <button data-quick="sleep_bed|${esc(b.name)}" type="button">🛏</button>`}
       </div>
@@ -329,6 +330,16 @@ function renderDash() {
       const r = await api('/api/pause', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, paused: !b.paused }) });
       if (r.ok) { toast(name + (r.paused ? ' paused' : ' resumed')); loadState().then(renderDash); }
       else toast('failed: ' + (r.error || '?'));
+    };
+  });
+  box.querySelectorAll('[data-nudge]').forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      const name = btn.dataset.nudge;
+      const r = await api('/api/nudge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
+      const receipt = r.receipts?.[0];
+      toast(receipt?.ok ? `${name}: nudged into safe village work` : `${name}: ${receipt?.reason || r.error || 'nudge blocked'}`);
+      await loadState(); renderDash();
     };
   });
   box.querySelectorAll('[data-pace]').forEach((sel) => {

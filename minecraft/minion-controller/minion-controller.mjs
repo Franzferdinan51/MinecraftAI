@@ -561,6 +561,7 @@ function fallbackAction(minion, statusJson, lastAction = '', tick = 0) {
     : role.includes('miner') ? ['stone', 'deepslate', 'diorite']
     : ['oak_log', 'jungle_log', 'birch_log', 'cherry_log'];
   const chosen = choices.find((name) => visible.includes(name));
+  if (!chosen && !target?.position) return 'mc look';
   if (!chosen && target?.position) return `mc goto_near ${target.position.x} ${target.position.y} ${target.position.z}`;
   const batchSize = role.includes('miner') ? 12 : role.includes('farmer') ? 8 : 6;
   return `mc collect ${chosen || choices[0]} ${batchSize}`;
@@ -574,7 +575,21 @@ function queuedFallbackAction(minion, statusJson, lastAction, tick, queueDepth) 
   return queueDepth > 0 ? fallbackAction(minion, statusJson, lastAction, tick) : '';
 }
 
+function nudgeSafety(statusJson) {
+  try {
+    const data = JSON.parse(statusJson).data || {};
+    const health = Number(data.health ?? 0);
+    const food = Number(data.food ?? 0);
+    if (health < 12) return { ok: false, reason: `health ${health}/20 is below the 12/20 recovery threshold` };
+    if (food < 10) return { ok: false, reason: `food ${food}/20 is below the 10/20 recovery threshold` };
+    return { ok: true, health, food, isDay: data.isDay === true };
+  } catch { return { ok: false, reason: 'status observation was invalid' }; }
+}
+
 function recoveryAfterFailedAction(minion, statusJson, attemptedAction, errorMessage, tick) {
+  if (/^mc sleep\b/.test(attemptedAction || '') && /No bed within 4 blocks/i.test(errorMessage || '')) {
+    return 'mc goto_near 50 63 77';
+  }
   // Follow fails when the player is out of entity range (unloaded). Walk to
   // their last shared-eyes sighting first, then follow once close.
   const followMatch = (attemptedAction || '').match(/^mc follow (.+)/);
@@ -857,6 +872,54 @@ const server = http.createServer((req, res) => {
       if (body.paused) { pausedBots.add(body.name); rememberTeamChat('PLAN', `${body.name} paused from Mission Control — standing by.`); }
       else { pausedBots.delete(body.name); rememberTeamChat('PLAN', `${body.name} resumed — back to the mission.`); }
       send(200, { ok: true, name: body.name, paused: pausedBots.has(body.name) });
+    }).catch((e) => send(400, { ok: false, error: e.message }));
+    return;
+  }
+  // Safe activity nudge: observe first, clear one stale task, then resume only
+  // Landfolk whose current vitals are safe. This is deliberately not a blind
+  // fleet-wide movement loop.
+  if (req.method === 'POST' && req.url === '/nudge') {
+    readJsonBody().then(async (body) => {
+      const names = body.name ? [String(body.name)] : minions.map((m) => m.name);
+      if (names.some((name) => !minions.some((m) => m.name === name))) return send(400, { ok: false, error: 'unknown bot' });
+      const receipts = [];
+      for (const name of names) {
+        const minion = minions.find((m) => m.name === name);
+        const entry = state.get(name);
+        const apiUrl = minion.api_url || DEFAULT_MC_API;
+        try {
+          const before = await callMc(['status', '--json'], apiUrl);
+          const safety = nudgeSafety(before);
+          if (!safety.ok) {
+            pausedBots.add(name);
+            entry.last_action = `nudge blocked | ${safety.reason}`;
+            receipts.push({ name, ok: false, state: 'recovery-required', reason: safety.reason });
+            continue;
+          }
+          try { await fetch(`${apiUrl}/task/cancel`, { method: 'POST' }); } catch {}
+          // `/status` already includes a bounded scene snapshot. Do not issue a
+          // concurrent `look` action here: a body can still be releasing a
+          // prior pathfinder command, and competing observations would block.
+          const observation = before;
+          const after = await callMc(['status', '--json'], apiUrl);
+          pausedBots.delete(name);
+          const action = safety.isDay
+            ? coordinatedAction(minion, after, entry.last_action, entry.ticks + 1)
+            : 'mc goto_near 50 63 77';
+          if (action) {
+            const out = await runMinionAction(entry, parseCommand(action).slice(1), apiUrl);
+            entry.last_action = `nudge | observation refreshed; ${action} -> ${out.slice(0, 120)}`;
+          } else {
+            entry.last_action = `nudge | observation refreshed; waiting for next assigned village action`;
+          }
+          rememberTeamChat('PLAN', `${name} safely nudged from Mission Control: ${entry.last_action}`);
+          receipts.push({ name, ok: true, state: 'active', safety, observation: String(observation).slice(0, 120), action: entry.last_action });
+        } catch (err) {
+          entry.last_action = `nudge failed | ${err.message}`;
+          receipts.push({ name, ok: false, state: 'error', reason: err.message });
+        }
+      }
+      send(200, { ok: receipts.some((r) => r.ok), receipts });
     }).catch((e) => send(400, { ok: false, error: e.message }));
     return;
   }

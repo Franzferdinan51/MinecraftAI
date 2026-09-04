@@ -59,6 +59,35 @@ assert.equal(
   'a blocked gather must immediately navigate toward its known resource instead of repeating the same failed collect',
 );
 
+assert.equal(
+  recoveryAfterFailedAction(
+    { role: 'house builder and path maker' },
+    blockedGatherStatus,
+    'mc sleep',
+    'mc exit 1: ERROR: No bed within 4 blocks.',
+    5,
+  ),
+  'mc goto_near 50 63 77',
+  'a failed sleep must navigate to the bed row instead of retrying sleep in place',
+);
+
+const nudgeSafety = loadFunction('nudgeSafety');
+assert.deepEqual(
+  nudgeSafety(JSON.stringify({ data: { health: 20, food: 18, isDay: true } })),
+  { ok: true, health: 20, food: 18, isDay: true },
+  'a healthy, fed Landfolk can receive an explicit safe nudge',
+);
+assert.equal(
+  nudgeSafety(JSON.stringify({ data: { health: 7, food: 20 } })).ok,
+  false,
+  'a low-health Landfolk must not be resumed by a nudge',
+);
+assert.equal(
+  nudgeSafety(JSON.stringify({ data: { health: 20, food: 4 } })).ok,
+  false,
+  'a hungry Landfolk must not be resumed by a nudge',
+);
+
 const recentHumanMessages = loadFunction('humanMessages');
 const chatFixture = JSON.stringify({ data: { unreadChat: [
   { from: 'Duckets', message: 'new task', ago: '24s' },
@@ -147,8 +176,20 @@ const builderWithStrippedLogs = JSON.stringify({
 });
 assert.equal(
   fallbackAction({ role: 'house builder and path maker' }, builderWithStrippedLogs, 'NONE', 1),
-  'mc collect oak_log 6',
-  'stripped wood must make builders gather usable logs instead of retrying an impossible craft',
+  'mc look',
+  'stripped wood must make builders refresh their local observation instead of blindly retrying a gather',
+);
+
+const noVisibleResources = JSON.stringify({
+  data: {
+    position: { x: 0, y: 70, z: 0 }, inventory: [], notableBlocks: [],
+    scene: { visible_block_hits: [] },
+  },
+});
+assert.equal(
+  fallbackAction({ role: 'miner and resource gatherer' }, noVisibleResources, 'NONE', 2),
+  'mc look',
+  'when no target is visible or known, refresh observation before attempting a blind collection',
 );
 
 const minerVisibleStone = JSON.stringify({

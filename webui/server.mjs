@@ -239,6 +239,18 @@ const server = http.createServer(async (req, res) => {
       }));
     } catch { return json(res, 400, { ok: false, error: 'bad json' }); }
   }
+  if (req.method === 'POST' && url.pathname === '/api/nudge') {
+    try {
+      const body = await readBody(req);
+      const name = body.name == null ? undefined : String(body.name);
+      if (name && !BOTS.some((b) => b.name === name && b.name !== 'DuckBot')) return json(res, 400, { ok: false, error: 'choose a Landfolk character' });
+      const result = await botFetch(3003, '/nudge', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(name ? { name } : {}),
+      });
+      webLog.push({ time: Date.now(), from: 'Mission Control', message: `[safe nudge: ${name || 'all Landfolk'}]`, private: false, channel: 'public' });
+      return json(res, result.ok ? 200 : 400, result);
+    } catch { return json(res, 400, { ok: false, error: 'bad json' }); }
+  }
   // ── terrain: real top-down surface render from the world save ──
   if (req.method === 'GET' && url.pathname === '/api/terrain') {
     try {
