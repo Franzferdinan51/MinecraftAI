@@ -20,6 +20,18 @@ function toast(msg) {
 function botColor(name) {
   return (bots.find((b) => b.name === name) || {}).color || '#555';
 }
+function closeMobileNav() {
+  document.body.classList.remove('nav-open');
+  $('#mobile-nav-toggle')?.setAttribute('aria-expanded', 'false');
+}
+function syncMobileNav() {
+  document.querySelectorAll('[data-mobile-view]').forEach((b) => b.classList.toggle('active', b.dataset.mobileView === view));
+}
+$('#mobile-nav-toggle')?.addEventListener('click', () => {
+  const open = document.body.classList.toggle('nav-open');
+  $('#mobile-nav-toggle').setAttribute('aria-expanded', String(open));
+});
+document.querySelectorAll('[data-mobile-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.mobileView)));
 function fmtTime(t) {
   const d = new Date(t);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -120,6 +132,7 @@ function renderRail() {
 // ── views ──
 function setView(v) {
   view = v;
+  closeMobileNav(); syncMobileNav();
   document.body.dataset.view = (v === 'status' || v === 'goal' || v === 'dash' || v === 'map') ? v : 'chat';
   document.querySelectorAll('#channels .chan').forEach((c) => c.classList.remove('active'));
   const chanEl = document.querySelector(`#channels .chan[data-view="${v}"]`);
@@ -579,9 +592,21 @@ function mapControls() {
   $('#map-reset')?.addEventListener('click', () => { mapView.zoom = 1; mapView.panX = 0; mapView.panY = 0; drawMap(); });
   $('#map-follow')?.addEventListener('change', () => { terrainCache = null; drawMap(); });
   let drag = null;
+  const endDrag = (e) => {
+    if (!drag) return;
+    const moved = Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 8;
+    if (!moved) {
+      const hit = (mapView.markers || []).find((m) => Math.hypot(e.offsetX - m.x, e.offsetY - m.y) <= 16);
+      if (hit) { careBot = hit.name; $('#care-name').textContent = careBot; renderMembers(); syncMobileNav(); toast(`Selected ${careBot}`); drawMap(); }
+    }
+    drag = null;
+    if (cv.hasPointerCapture?.(e.pointerId)) cv.releasePointerCapture(e.pointerId);
+  };
   cv.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, px: mapView.panX, py: mapView.panY }; cv.setPointerCapture(e.pointerId); });
   cv.addEventListener('pointermove', (e) => { if (drag) { mapView.panX = drag.px + e.clientX - drag.x; mapView.panY = drag.py + e.clientY - drag.y; drawMap(); } });
-  cv.addEventListener('pointerup', () => { drag = null; });
+  cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointercancel', endDrag);
+  cv.addEventListener('lostpointercapture', () => { drag = null; });
   cv.addEventListener('wheel', (e) => { e.preventDefault(); change(e.deltaY < 0 ? .2 : -.2); }, { passive: false });
 }
 async function drawMap() {
@@ -637,16 +662,20 @@ async function drawMap() {
   ctx.beginPath(); ctx.arc(px(HOUSE[0]), pz(HOUSE[2]), 9, 0, 7); ctx.fill(); ctx.stroke();
   ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText('HOUSE', px(HOUSE[0]), pz(HOUSE[2]) - 13);
+  mapView.markers = [];
   bots.forEach((b) => {
     if (!b.pos) return;
     const cxp = Math.min(W - 10, Math.max(10, px(b.pos[0])));
     const czp = Math.min(W - 10, Math.max(10, pz(b.pos[2])));
+    mapView.markers.push({ name: b.name, x: cxp, y: czp });
     ctx.fillStyle = b.paused ? '#555' : b.color;
     ctx.beginPath(); ctx.arc(cxp, czp, 10, 0, 7); ctx.fill();
     ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
     ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif';
     ctx.fillText(b.name, cxp, czp - 14);
   });
+  const follow = $('#map-follow')?.checked && careBot ? ` · following ${careBot}` : '';
+  $('#map-readout').textContent = `${t ? `terrain ${t.w}×${t.w}` : 'marker-only fallback'} · zoom ${mapView.zoom.toFixed(2)}×${follow} · tap a bot marker to select`;
 }
 
 // ── alerts (low HP, deaths) ──

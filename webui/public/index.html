@@ -32,7 +32,7 @@
   </aside>
   <!-- main -->
   <main id="main">
-    <header id="chan-head"><span class="hash">#</span><b id="chan-name">global-chat</b><span id="chan-topic">everything said in the world, live</span><input id="chat-filter" placeholder="filter…"></header>
+    <header id="chan-head"><button id="mobile-nav-toggle" type="button" aria-label="Open navigation" aria-controls="channels" aria-expanded="false">☰</button><span class="hash">#</span><b id="chan-name">global-chat</b><span id="chan-topic">everything said in the world, live</span><label class="sr-only" for="chat-filter">Filter chat</label><input id="chat-filter" placeholder="filter…" aria-label="Filter chat"></header>
     <div id="broadcast">
       <button data-b="come" type="button">📣 Come here</button>
       <button data-b="report" type="button">📝 Report in</button>
@@ -42,7 +42,7 @@
     </div>
     <div id="messages"></div>
     <div id="status-cards"></div>
-    <div id="map-pane"><div class="panel wide"><h2>🗺 Village map</h2><p class="hint">Live high-resolution terrain. Scroll to zoom, drag to pan, click a bot marker to inspect.</p><div class="map-tools"><button id="map-out" type="button">−</button><button id="map-reset" type="button">⌖ reset</button><button id="map-in" type="button">+</button><label><input id="map-follow" type="checkbox"> follow selected</label><span class="map-legend"><i style="background:#5865f2"></i>house <i style="background:#faa81a"></i>beds <i style="background:#57a25c"></i>bots</span></div><canvas id="map" width="900" height="900"></canvas><div id="map-readout" class="role">terrain ready</div></div></div>
+    <div id="map-pane"><div class="panel wide"><h2>🗺 Village map</h2><p class="hint">Live high-resolution terrain. Scroll to zoom, drag to pan, click a bot marker to inspect.</p><div class="map-tools"><button id="map-out" type="button" aria-label="Zoom out">−</button><button id="map-reset" type="button">⌖ reset</button><button id="map-in" type="button" aria-label="Zoom in">+</button><label><input id="map-follow" type="checkbox"> follow selected</label><span class="map-legend"><i style="background:#5865f2"></i>house <i style="background:#faa81a"></i>beds <i style="background:#57a25c"></i>bots</span></div><canvas id="map" width="900" height="900" tabindex="0" role="img" aria-label="Interactive terrain map with house, beds, and bot positions"></canvas><div id="map-readout" class="role" aria-live="polite">terrain ready</div></div></div>
     <div id="goal-pane">
       <div class="panel">
         <h2>🎯 Village goal</h2>
@@ -94,6 +94,9 @@
     </div>
     <form id="composer"><input id="input" autocomplete="off" placeholder="Message #global-chat — bots hear you like in-game chat"><button type="submit">Send</button></form>
   </main>
+  <nav id="mobile-viewbar" aria-label="Quick navigation">
+    <button type="button" data-mobile-view="global">💬<span>Chat</span></button><button type="button" data-mobile-view="team">📻<span>Team</span></button><button type="button" data-mobile-view="map">🗺<span>Map</span></button><button type="button" data-mobile-view="dash">⚙<span>Control</span></button><button type="button" data-mobile-view="goal">🎯<span>Goal</span></button>
+  </nav>
   <!-- members -->
   <aside id="members">
     <div class="chan-group">BOTS — <span id="online-count">0</span></div>
@@ -119,8 +122,8 @@
     </div>
   </aside>
 </div>
-<div id="toast"></div>
-<div id="inv-modal"><div id="inv-box"><h3 id="inv-title">🎒</h3><div id="inv-list"></div><button id="inv-close" type="button">Close</button></div></div>
-<script src="/app.js?v=4"></script>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="inv-modal" role="dialog" aria-modal="true" aria-labelledby="inv-title"><div id="inv-box"><h3 id="inv-title">🎒</h3><div id="inv-list"></div><button id="inv-close" type="button" aria-label="Close inventory">Close</button></div></div>
+<script src="/app.js?v=5"></script>
 </body>
 </html>
