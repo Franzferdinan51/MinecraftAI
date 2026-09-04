@@ -38,6 +38,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
+import { createRequestPolicy } from './request-policy.mjs';
+
+const lmPolicy = createRequestPolicy();
+
 const LMS_URL = (process.env.LMS_URL || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
 const DEFAULT_MODEL = process.env.LMS_MODEL || 'ornith-1.5-9b';
 let activeModel = DEFAULT_MODEL;
@@ -192,16 +196,45 @@ async function runTurn() {
       temperature: 0.4,
     };
 
-    const res = await fetch(`${LMS_URL}/chat/completions`, {
-      method: 'POST',
-      headers: LMS_HEADERS,
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      console.error('LM Studio error', res.status, text.slice(0, 200));
+    async function runFallback(reason) {
+      const fb = fallbackAction(status);
+      try {
+        const out = await callMc(parseCommand(fb).slice(1));
+        lastAction = `${fb} -> ${out.slice(0, 120)} | fallback (${reason})`;
+      } catch (err) {
+        lastAction = `${fb} -> ERROR ${err.message} | fallback (${reason})`;
+      }
+    }
+
+    // Consecutive LM failures open a cooldown: skip the model call and act
+    // deterministically instead of hammering a sick server or idling.
+    if (lmPolicy.shouldSkip()) {
+      await runFallback('lm cooldown');
       return;
     }
+
+    let res;
+    try {
+      res = await fetch(`${LMS_URL}/chat/completions`, {
+        method: 'POST',
+        headers: LMS_HEADERS,
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(90000),
+      });
+    } catch (err) {
+      lmPolicy.recordFailure();
+      console.error('LM Studio fetch error', String(err.message || err).slice(0, 200));
+      await runFallback('lm unreachable');
+      return;
+    }
+    if (!res.ok) {
+      const text = await res.text();
+      lmPolicy.recordFailure();
+      console.error('LM Studio error', res.status, text.slice(0, 200));
+      await runFallback(`lm ${res.status}`);
+      return;
+    }
+    lmPolicy.recordSuccess();
     const json = await res.json();
     const reply = (json.choices?.[0]?.message?.content || json.choices?.[0]?.message?.reasoning_content || '').trim();
 
@@ -266,6 +299,7 @@ const server = http.createServer((req, res) => {
       last_observation: lastObservation.slice(-800),
       last_action: lastAction,
       pending,
+      lm_errors: lmPolicy.state(),
     }));
     return;
   }
