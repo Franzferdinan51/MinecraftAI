@@ -71,6 +71,23 @@ assert.equal(
   'a failed sleep must navigate to the bed row instead of retrying sleep in place',
 );
 
+const shouldDeferToRunningTask = loadFunction('shouldDeferToRunningTask');
+assert.equal(
+  shouldDeferToRunningTask(['bg_goto', '50', '63', '79'], { status: 'running', action: 'bg_goto' }),
+  true,
+  'a controller turn must not stack a second background navigation on a running task',
+);
+assert.equal(
+  shouldDeferToRunningTask(['chat', 'working'], { status: 'running', action: 'bg_goto' }),
+  false,
+  'a running navigation task must not suppress harmless status communication',
+);
+assert.equal(
+  shouldDeferToRunningTask(['bg_goto', '50', '63', '79'], { status: 'done', action: 'bg_goto' }),
+  false,
+  'a completed task must not block the next navigation decision',
+);
+
 const nudgeSafety = loadFunction('nudgeSafety');
 assert.deepEqual(
   nudgeSafety(JSON.stringify({ data: { health: 20, food: 18, isDay: true } })),
@@ -314,16 +331,13 @@ assert.equal(
 // Name-gating: a message naming one bot belongs to that bot alone.
 const namedMinions = loadFunction('namedMinions');
 const canClaimHumanMessage = loadFunction('canClaimHumanMessage', `\nconst namedMinions = ${namedMinions.toString()};`);
-const BOT_NAMES = ['Steve', 'Reed', 'Moss', 'Flint', 'Ember'];
-assert.deepEqual(
-  namedMinions('Reed come here please', BOT_NAMES),
-  ['Reed'],
-  'a message naming Reed must resolve to Reed only',
-);
-assert.deepEqual(
-  namedMinions('does anyone have wood?', BOT_NAMES),
-  [],
-  'an unnamed message must resolve to nobody so the shared behavior applies',
+const landfolkKnownNames = loadFunction('landfolkKnownNames', `const minions = [{ name: 'Steve' }, { name: 'Reed' }, { name: 'Moss' }, { name: 'Flint' }, { name: 'Ember' }];`);
+const BOT_NAMES = landfolkKnownNames();
+assert.deepEqual(BOT_NAMES, ['DuckBot', 'Steve', 'Reed', 'Moss', 'Flint', 'Ember'], 'Landfolk routing must include DuckBot as the fleet leader');
+assert.equal(
+  canClaimHumanMessage('Steve', 'DuckBot what are you doing?', BOT_NAMES),
+  false,
+  'Steve must not claim leadership traffic addressed to DuckBot',
 );
 assert.equal(
   canClaimHumanMessage('Steve', 'Reed come here please', BOT_NAMES),

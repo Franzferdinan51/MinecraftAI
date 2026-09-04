@@ -102,6 +102,26 @@ for (let i = 2; i < process.argv.length; i++) {
 let bot = null;
 let mcData = null;
 let botReady = false;
+
+// Mineflayer's recipe registry can occasionally omit table-free plank recipes
+// on newer protocol mappings. Preserve normal recipe selection first, then
+// supply this narrow vanilla 2x2 fallback only for a normal log/wood → planks.
+function tableFreeCraftRecipe(item, inventory, itemsByName) {
+  if (!String(item).endsWith('_planks')) return null;
+  const woodType = String(item).slice(0, -'_planks'.length);
+  const source = (inventory || []).find((entry) => entry?.count > 0
+    && (entry.name === `${woodType}_log` || entry.name === `${woodType}_wood`));
+  const result = itemsByName?.[item];
+  if (!source || !result || !Number.isInteger(source.type)) return null;
+  return {
+    result: { id: result.id, metadata: null, count: 4 },
+    ingredients: [{ id: source.type, metadata: null, count: -1 }],
+    inShape: null,
+    outShape: null,
+    requiresTable: false,
+  };
+}
+
 let chatLog = [];
 let deathLog = [];
 let commandQueue = []; // complex commands for Hermes to process
@@ -1860,6 +1880,10 @@ const ACTIONS = {
     // Fallback: try getting all recipes regardless
     if (!recipes || recipes.length === 0) {
       recipes = b.recipesAll(itemType.id, null, 1);
+    }
+    if (!recipes || recipes.length === 0) {
+      const tableFree = tableFreeCraftRecipe(item, b.inventory.items(), mcData.itemsByName);
+      if (tableFree) recipes = [tableFree];
     }
     if (!recipes || recipes.length === 0) {
       throw new Error(`Can't craft ${item}. ${table ? 'Missing ingredients.' : 'Need a crafting table nearby (place one within 4 blocks).'} Use /action/recipes to check.`);

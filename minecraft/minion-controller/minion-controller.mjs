@@ -372,7 +372,11 @@ function rememberHumanMessage(minionName, message) {
 }
 
 // Name-gating: "Reed come here" is for Reed only — the rest stay silent and
-// keep working. Unnamed messages ("anyone have wood?") stay shared.
+// keep working. DuckBot is included as the fleet leader so leader-directed
+// traffic cannot be claimed by a Landfolk controller turn.
+function landfolkKnownNames() {
+  return ['DuckBot', ...minions.map((m) => m.name)];
+}
 function namedMinions(message, botNames) {
   const text = (message || '').toLowerCase();
   return (botNames || []).filter((n) => text.includes(String(n).toLowerCase()));
@@ -606,6 +610,12 @@ function recoveryAfterFailedAction(minion, statusJson, attemptedAction, errorMes
 
 // Different bots may act together. Commands for one bot must not overlap: a
 // second navigation command otherwise cancels the first with "goal changed".
+function shouldDeferToRunningTask(args, task) {
+  if (task?.status !== 'running') return false;
+  const action = Array.isArray(args) ? args[0] : '';
+  return new Set(['bg_goto', 'goto', 'goto_near', 'follow', 'collect', 'fight', 'flee', 'dig', 'pickup', 'place', 'place_fill', 'till', 'sow', 'harvest', 'craft', 'smelt', 'eat']).has(action);
+}
+
 async function runMinionAction(entry, args, apiUrl) {
   while (entry.action_busy) await new Promise((resolve) => setTimeout(resolve, 50));
   entry.action_busy = true;
@@ -624,6 +634,12 @@ async function runMinionAction(entry, args, apiUrl) {
     });
   } catch {}
   try {
+    try {
+      const taskRes = await fetch(`${apiUrl}/task`, { signal: AbortSignal.timeout(3000) });
+      const taskJson = await taskRes.json();
+      const task = taskJson.data?.task;
+      if (shouldDeferToRunningTask(args, task)) return `deferred: ${task.action} is already running`;
+    } catch {}
     const out = await callMc(args, apiUrl);
     // Navigation commands are launched as Mineflayer tasks and return before
     // their pathfinder is finished. Hold this bot's slot until that task has
@@ -663,7 +679,7 @@ async function tick(minion) {
         entry.last_action = `stuck reset | task cancelled, looked around -> ${out.slice(0, 120)}`;
       } catch (err) { entry.last_action = `stuck reset | task cancelled -> ${err.message.slice(0, 120)}`; }
     }
-    const botNames = minions.map((m) => m.name);
+    const botNames = landfolkKnownNames();
     // The raw read_chat API retains old entries forever. Feed the model only
     // current human messages; controller teamChat remains its bot coordination feed.
     // Web-UI injections join the same flow (targeted DMs only reach their bot).

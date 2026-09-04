@@ -137,6 +137,31 @@ function compactObservation(statusJson, chatText, lastActionText) {
 let lastObservation = '';
 let lastAction = '';
 let pending = false;
+let lastAcknowledgedWhisper = '';
+let whisperCheckBusy = false;
+
+function latestHumanWhisper(chatText, botNames = new Set()) {
+  const lines = String(chatText || '').split('\n').reverse();
+  for (const line of lines) {
+    const match = line.match(/^\s*<([^>]+)>\s*(.*?)\s*\[whisper\]\s*$/i);
+    if (!match) continue;
+    const from = match[1].trim();
+    if (!from || botNames.has(from.toLowerCase())) continue;
+    return { from, message: match[2].trim() };
+  }
+  return null;
+}
+
+async function acknowledgeHumanWhisper(chatText) {
+  const whisper = latestHumanWhisper(chatText, new Set(['duckbot', 'steve', 'reed', 'moss', 'flint', 'ember']));
+  if (!whisper) return false;
+  const key = `${whisper.from}:${whisper.message}`;
+  if (key === lastAcknowledgedWhisper) return false;
+  await callMc(['chat_to', whisper.from, 'I hear you — I’m leading the village and checking the team now.']);
+  lastAcknowledgedWhisper = key;
+  lastAction = `whisper acknowledgement sent to ${whisper.from}`;
+  return true;
+}
 
 function parseCommand(line) {
   const tokens = [];
@@ -317,4 +342,18 @@ server.listen(BRIDGE_PORT, '127.0.0.1', () => {
 });
 
 setInterval(runTurn, DECISION_INTERVAL_MS);
+// Direct whispers are leader traffic. Poll them independently from model turns
+// so a slow/cancelled completion cannot leave a player without a DuckBot reply.
+setInterval(async () => {
+  if (whisperCheckBusy) return;
+  whisperCheckBusy = true;
+  try {
+    const chat = await callMc(['read_chat', '8']);
+    await acknowledgeHumanWhisper(chat);
+  } catch (err) {
+    console.error('whisper acknowledgement error', String(err.message || err).slice(0, 160));
+  } finally {
+    whisperCheckBusy = false;
+  }
+}, 2000);
 runTurn();
