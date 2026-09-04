@@ -108,9 +108,9 @@ async function hermesCraftModeDetail(id) {
 function modeReadiness() {
   const modes = HERMESCRAFT_MANIFEST.modes || [];
   return modes.map((mode) => {
-    const configPresent = mode.config ? fs.existsSync(path.join(HERMESCRAFT_ROOT, mode.config)) : true;
+    const configPresent = mode.config ? fs.existsSync(path.join(HERMESCRAFT_ROOT, mode.config)) : false;
     const active = mode.id === 'landfolk' && mode.status === 'active';
-    const state = active ? 'active' : mode.status === 'profile-ready' ? 'profile-ready' : configPresent ? 'configured' : 'documented';
+    const state = active ? 'active' : mode.status === 'profile-ready' ? 'profile-ready' : mode.id === 'minecraft' ? 'runtime-only' : mode.config && configPresent ? 'configured' : 'documented';
     return { id: mode.id, status: state, config_present: configPresent, launch_policy: active ? 'managed-by-existing-fleet' : 'manual-review-required' };
   });
 }

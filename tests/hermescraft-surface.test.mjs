@@ -101,6 +101,12 @@ test('hermescraft catalog: mode cards include deployment summaries', () => {
   assert.match(app, /runtime_status/);
 });
 
+test('hermescraft readiness: mode states distinguish runtime-only and documented flows', () => {
+  const server = read(join(root, 'webui/server.mjs'));
+  assert.match(server, /runtime-only/);
+  assert.match(server, /documented/);
+});
+
 test('hermescraft mode detail: configured agents include live runtime status', () => {
   const server = read(join(root, 'webui/server.mjs'));
   assert.match(server, /runtime_status/);
