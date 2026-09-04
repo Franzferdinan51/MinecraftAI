@@ -99,6 +99,7 @@ test('hermescraft catalog: mode cards include deployment summaries', () => {
   assert.match(app, /deployment_summary/);
   assert.match(app, /agent_count/);
   assert.match(app, /runtime_status/);
+  assert.match(app, /mode-agent/);
 });
 
 test('hermescraft readiness: mode states distinguish runtime-only and documented flows', () => {
