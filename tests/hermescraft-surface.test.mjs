@@ -84,3 +84,10 @@ test('hermescraft readiness: Mission Control reports each mode operational state
   assert.match(app, /operational_modes/);
   assert.match(app, /profile-ready/);
 });
+
+test('hermescraft mode detail: WebUI exposes safe per-mode deployment summaries', () => {
+  const server = read(join(root, 'webui/server.mjs'));
+  assert.match(server, /hermesCraftModeDetail/);
+  assert.match(server, /deployment_summary/);
+  assert.match(server, /hermescraft.*mode/);
+});

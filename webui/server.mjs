@@ -67,6 +67,39 @@ function readBody(req) {
   });
 }
 
+function hermesCraftModeDetail(id) {
+  const mode = (HERMESCRAFT_MANIFEST.modes || []).find((m) => m.id === id);
+  if (!mode) return null;
+  let agents = [];
+  if (mode.config) {
+    const configPath = path.join(HERMESCRAFT_ROOT, mode.config);
+    if (fs.existsSync(configPath)) {
+      try {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        agents = Array.isArray(config) ? config.map((a) => ({
+          name: a.name || null,
+          role: a.role || null,
+          port: Number(new URL(a.api_url).port) || null,
+        })) : [];
+      } catch { /* readiness reports the missing/unreadable config */ }
+    }
+  }
+  const readiness = modeReadiness().find((m) => m.id === id);
+  return {
+    id: mode.id,
+    name: mode.name,
+    upstream_entry: mode.upstream_entry,
+    status: readiness?.status || mode.status,
+    deployment_summary: {
+      agents,
+      agent_count: agents.length,
+      config_present: readiness?.config_present === true,
+      launch_policy: readiness?.launch_policy || 'manual-review-required',
+      activation: mode.id === 'civilization' ? 'requires seven isolated profiles and bodies' : mode.id === 'landfolk' ? 'uses the active six-body fleet' : 'requires deliberate operator review',
+    },
+  };
+}
+
 function modeReadiness() {
   const modes = HERMESCRAFT_MANIFEST.modes || [];
   return modes.map((mode) => {
@@ -100,6 +133,11 @@ const server = http.createServer(async (req, res) => {
   // ── HermesCraft modes/capabilities: static, safe, no runtime secrets ──
   if (req.method === 'GET' && url.pathname === '/api/hermescraft') {
     return json(res, 200, { ok: true, ...HERMESCRAFT_MANIFEST, readiness: await hermesCraftReadiness() });
+  }
+  const modeDetailMatch = url.pathname.match(/^\/api\/hermescraft\/mode\/([a-z-]+)$/);
+  if (req.method === 'GET' && modeDetailMatch) {
+    const detail = hermesCraftModeDetail(modeDetailMatch[1]);
+    return detail ? json(res, 200, { ok: true, ...detail }) : json(res, 404, { ok: false, error: 'unknown HermesCraft mode' });
   }
   // ── state: one snapshot for the whole village ──
   if (req.method === 'GET' && url.pathname === '/api/state') {
