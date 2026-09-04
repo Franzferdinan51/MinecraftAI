@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HermesCraft Mission Control</title>
-<link rel="stylesheet" href="/styles.css?v=6">
+<link rel="stylesheet" href="/styles.css?v=8">
 </head>
 <body>
 <div id="app">
@@ -26,6 +26,7 @@
     <div class="chan-group">VILLAGE</div>
     <div class="chan" data-view="goal"><span class="hash">🎯</span>village-goal</div>
     <div class="chan" data-view="ask"><span class="hash">🤖</span>ask-ai</div>
+    <div class="chan" data-view="modes"><span class="hash">🧭</span>HermesCraft modes</div>
     <div class="chan" data-view="status"><span class="hash">#</span>bot-status</div>
     <div class="chan" data-view="dash"><span class="hash">⚙</span>dashboard</div>
     <div id="me"><div class="avatar" style="--c:#faa81a">D</div><div><b>Duckets</b><span>commander</span></div></div>
@@ -52,6 +53,14 @@
         <div id="goal-presets"></div>
         <button id="goal-save">Set goal</button>
       </div>
+    </div>
+    <div id="modes-pane">
+      <div class="panel wide">
+        <div class="mode-title"><div><span class="eyebrow">UPSTREAM INTEGRATION</span><h2>🧭 HermesCraft modes</h2><p class="hint">The upstream modes are mapped into this fleet. Read-only catalog — launches remain deliberate and safety-gated.</p></div><a class="source-link" href="https://github.com/bigph00t/hermescraft" target="_blank" rel="noreferrer">↗ upstream</a></div>
+        <div id="mode-cards"><p class="hint">loading modes…</p></div>
+      </div>
+      <div class="panel wide"><h2>✨ Shared capabilities</h2><div id="mode-capabilities" class="capability-grid"><p class="hint">loading…</p></div></div>
+      <div class="panel wide"><h2>🧩 Fleet mapping</h2><div id="mode-fleet" class="fleet-map"><p class="hint">loading…</p></div></div>
     </div>
     <div id="dash-pane">
       <div class="panel wide">
@@ -105,7 +114,7 @@
     <form id="composer"><input id="input" autocomplete="off" placeholder="Message #global-chat — bots hear you like in-game chat"><button type="submit">Send</button></form>
   </main>
   <nav id="mobile-viewbar" aria-label="Quick navigation">
-    <button type="button" data-mobile-view="global">💬<span>Chat</span></button><button type="button" data-mobile-view="team">📻<span>Team</span></button><button type="button" data-mobile-view="map">🗺<span>Map</span></button><button type="button" data-mobile-view="dash">⚙<span>Control</span></button><button type="button" data-mobile-view="goal">🎯<span>Goal</span></button>
+    <button type="button" data-mobile-view="global">💬<span>Chat</span></button><button type="button" data-mobile-view="team">📻<span>Team</span></button><button type="button" data-mobile-view="map">🗺<span>Map</span></button><button type="button" data-mobile-view="modes">🧭<span>Modes</span></button><button type="button" data-mobile-view="dash">⚙<span>Control</span></button><button type="button" data-mobile-view="goal">🎯<span>Goal</span></button>
   </nav>
   <!-- members -->
   <aside id="members">
@@ -134,6 +143,6 @@
 </div>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="inv-modal" role="dialog" aria-modal="true" aria-labelledby="inv-title"><div id="inv-box"><h3 id="inv-title">🎒</h3><div id="inv-list"></div><button id="inv-close" type="button" aria-label="Close inventory">Close</button></div></div>
-<script src="/app.js?v=7"></script>
+<script src="/app.js?v=8"></script>
 </body>
 </html>

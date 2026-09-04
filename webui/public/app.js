@@ -133,7 +133,7 @@ function renderRail() {
 function setView(v) {
   view = v;
   closeMobileNav(); syncMobileNav();
-  document.body.dataset.view = (v === 'status' || v === 'goal' || v === 'dash' || v === 'map') ? v : 'chat';
+  document.body.dataset.view = (v === 'status' || v === 'goal' || v === 'dash' || v === 'map' || v === 'modes') ? v : 'chat';
   document.querySelectorAll('#channels .chan').forEach((c) => c.classList.remove('active'));
   const chanEl = document.querySelector(`#channels .chan[data-view="${v}"]`);
   if (chanEl) chanEl.classList.add('active');
@@ -161,6 +161,10 @@ function setView(v) {
     $('#chan-name').textContent = 'ask-ai';
     $('#chan-topic').textContent = 'the overseer AI answers with live village knowledge';
     $('#input').placeholder = 'Ask about the village — e.g. what is Moss doing?';
+  } else if (v === 'modes') {
+    $('#chan-name').textContent = 'HermesCraft modes';
+    $('#chan-topic').textContent = 'companion · civilization · landfolk · minecraft core · play';
+    loadHermesCraft();
   } else if (v === 'dash') {
     $('#chan-name').textContent = 'dashboard';
     $('#chan-topic').textContent = 'fleet vitals · world admin · inventories · settings';
@@ -254,6 +258,24 @@ document.addEventListener('click', async (e) => {
     else toast('failed: ' + (r.error || '?'));
   }
 });
+
+// ── HermesCraft mode catalog ──
+async function loadHermesCraft() {
+  const cards = $('#mode-cards');
+  if (!cards) return;
+  try {
+    const r = await api('/api/hermescraft');
+    if (!r.ok) throw new Error(r.error || 'catalog offline');
+    cards.innerHTML = (r.modes || []).map((m) => `<article class="mode-card ${esc(m.status)}">
+      <div class="mode-card-head"><span class="mode-icon">${m.id === 'landfolk' ? '🌿' : m.id === 'companion' ? '🧑‍🌾' : m.id === 'civilization' ? '🏘️' : m.id === 'minecraft' ? '⛏️' : '🎮'}</span><div><h3>${esc(m.name)}</h3><span class="mode-status">${esc(m.status)}</span></div></div>
+      <p>${esc(m.description)}</p><code>${esc(m.upstream_entry)}</code>
+    </article>`).join('');
+    $('#mode-capabilities').innerHTML = (r.capabilities || []).map((x) => `<span class="capability">✓ ${esc(x)}</span>`).join('');
+    $('#mode-fleet').innerHTML = (r.fleet || []).map((b) => `<div class="fleet-agent"><span class="avatar" style="background:${botColor(b.name)}">${esc(b.name[0])}</span><div><b>${esc(b.name)}</b><span>${esc(b.role)} · body :${b.body_port} · ${esc(b.profile)}</span></div></div>`).join('');
+  } catch (e) {
+    cards.innerHTML = `<p class="hint">HermesCraft catalog unavailable: ${esc(e.message)}</p>`;
+  }
+}
 
 // ── interface settings (persisted) ──
 const UI = Object.assign({ refresh: 5, overheard: true, mapMin: 160, chatN: 60, toasts: true, theme: 'discord', compact: false },

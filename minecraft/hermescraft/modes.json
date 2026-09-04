@@ -1,0 +1,97 @@
+{
+  "name": "HermesCraft",
+  "upstream": "https://github.com/bigph00t/hermescraft",
+  "license": "MIT",
+  "attribution": "Copyright (c) 2026 bigph00t; adapted for MinecraftAI",
+  "modes": [
+    {
+      "id": "companion",
+      "name": "Companion Mode",
+      "upstream_entry": "hermescraft.sh / start-steve.sh",
+      "status": "supported",
+      "description": "One persistent Hermes agent as an in-world friend. Follow, gather, build, scout, fight/flee, remember."
+    },
+    {
+      "id": "landfolk",
+      "name": "Landfolk Mode",
+      "upstream_entry": "landfolk.sh / scripts/run-landfolk-bots.sh",
+      "status": "active",
+      "description": "The featured six-agent personal-world fleet: DuckBot leads Steve, Reed, Moss, Flint, and Ember."
+    },
+    {
+      "id": "civilization",
+      "name": "Civilization Mode",
+      "upstream_entry": "civilization.sh",
+      "status": "profile-ready",
+      "description": "Larger multi-agent society pattern with separate identities, public chat, DMs, overhearing, routines, and division of labor."
+    },
+    {
+      "id": "minecraft",
+      "name": "Minecraft Core",
+      "upstream_entry": "SOUL-minecraft.md / bot/server.js / bin/mc",
+      "status": "active",
+      "description": "Embodied Mineflayer body, fair-play perception, actions, background tasks, social routing, memory, and screenshot metadata."
+    },
+    {
+      "id": "play",
+      "name": "Play / Server Flow",
+      "upstream_entry": "play.sh / server/start.sh",
+      "status": "documented",
+      "description": "Upstream play and server helpers are documented; MinecraftAI keeps its fixture-pinned 26.2 server and one-bot canary path."
+    }
+  ],
+  "fleet": [
+    {
+      "name": "DuckBot",
+      "role": "overseer",
+      "body_port": 3001,
+      "profile": "minecraft-gemma-bot"
+    },
+    {
+      "name": "Steve",
+      "role": "foreman",
+      "body_port": 3011,
+      "profile": "minecraft-steve"
+    },
+    {
+      "name": "Reed",
+      "role": "builder",
+      "body_port": 3012,
+      "profile": "minecraft-reed"
+    },
+    {
+      "name": "Moss",
+      "role": "farmer",
+      "body_port": 3013,
+      "profile": "minecraft-moss"
+    },
+    {
+      "name": "Flint",
+      "role": "miner",
+      "body_port": 3014,
+      "profile": "minecraft-flint"
+    },
+    {
+      "name": "Ember",
+      "role": "guardian",
+      "body_port": 3015,
+      "profile": "minecraft-ember"
+    }
+  ],
+  "capabilities": [
+    "embodied gameplay",
+    "fair-play perception",
+    "public chat",
+    "direct messages",
+    "overhearing",
+    "background tasks",
+    "persistent identity",
+    "role skillbooks",
+    "screenshot metadata"
+  ],
+  "safety_boundary": {
+    "machine_enforced_by": "minecraft/intelligence/contracts.mjs",
+    "approval_gateway": "minecraft/intelligence/authority-gateway.mjs",
+    "notes": "No unrestricted shell, filesystem, credentials, arbitrary RCON, or omniscient x-ray."
+  }
+}

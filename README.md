@@ -123,10 +123,16 @@ loops. All six agents are Hermes agents on the switchable
 `ornith-1.5-9b` brain (see `scripts/fleet-model.sh`), each with its
 own isolated profile, body, and role skills — DuckBot (overseer),
 Steve (foreman), Reed (builder), Moss (farmer), Flint (miner), Ember
-(guardian). Full upstream hermescraft behavior is adopted and
-synthesized (see `docs/THIRD-PARTY.md`): landfolk character craft,
-role skillbooks, inventory-first play, SUBMERGED recovery, one-line
-chat with whisper coordination, and a 3-observations-to-1-action loop.
+(guardian). Full upstream hermescraft behavior and modes are adopted and
+synthesized (see `minecraft/hermescraft/` and `docs/THIRD-PARTY.md`):
+Companion, Civilization, Landfolk, Minecraft Core, and Play/Server
+flows are cataloged in `minecraft/hermescraft/modes.json`; Landfolk is
+the active six-agent fleet. The Mission Control **HermesCraft modes**
+view exposes this mapping, capabilities, provenance, and per-agent
+body/profile wiring without exposing secrets or offering an unsafe
+bulk launcher. The integrated behavior includes landfolk character
+craft, role skillbooks, inventory-first play, SUBMERGED recovery,
+one-line chat with whisper coordination, and a 3-observations-to-1-action loop.
 
 The roadmap gives each character explicit, bounded powers:
 
@@ -170,7 +176,7 @@ access.
 - [`LICENSE`](./LICENSE) — MIT
 - `docs/` — architecture, running, LM Studio config, troubleshooting, `THIRD-PARTY.md` (hermescraft MIT attribution)
 - `lmstudio-bridge/` — the single-bot LM Studio bridge
-- `minecraft/` — bot server, minion controller, intelligence (contracts, shadow audit, journal), protocol fixtures, `hermescraft/` (vendored landfolk cards, shared contract, skill guides)
+- `minecraft/` — bot server, minion controller, intelligence (contracts, shadow audit, journal), protocol fixtures, `hermescraft/` (vendored **all upstream modes**: Companion, Civilization, Landfolk, Minecraft Core, Play/Server; adapted prompts, SOULs, skill guides, and `modes.json` catalog)
 - `hermes-overseer/` — overseer request builder, fleet roster (`AGENTS.md`)
 - `webui/` — Mission Control (desktop + mobile)
 - `tests/` + `minecraft/bot-server/test/` — 123 green (run: `node --test tests/*.test.mjs minecraft/bot-server/test/*.test.js`)

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { renderTerrain } from './terrain.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const HERMESCRAFT_MANIFEST = JSON.parse(fs.readFileSync(path.join(ROOT, '..', 'minecraft', 'hermescraft', 'modes.json'), 'utf8'));
 const PORT = Number(process.env.WEBUI_PORT || 3100);
 
 const BOTS = [
@@ -69,6 +70,10 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const botByName = (n) => BOTS.find((b) => b.name === n);
 
+  // ── HermesCraft modes/capabilities: static, safe, no runtime secrets ──
+  if (req.method === 'GET' && url.pathname === '/api/hermescraft') {
+    return json(res, 200, { ok: true, ...HERMESCRAFT_MANIFEST });
+  }
   // ── state: one snapshot for the whole village ──
   if (req.method === 'GET' && url.pathname === '/api/state') {
     const [ctrl, bridge] = await Promise.all([botFetch(3003, '/health'), botFetch(3002, '/health')]);
