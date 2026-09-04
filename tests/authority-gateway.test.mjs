@@ -49,6 +49,12 @@ test('busy bot rejects a new action', () => {
   assert.equal(d.reason, 'bot_busy');
 });
 
+test('held bot rejects a new action without entering recovery', () => {
+  const d = authorize(quarry, ctx({ botState: { Flint: { hold: true } } }));
+  assert.equal(d.allowed, false);
+  assert.equal(d.reason, 'bot_hold');
+});
+
 test('duplicate idempotency key returns the original receipt, no new action', () => {
   const usedKeys = new Map();
   const first = authorize(quarry, ctx({ usedKeys }));

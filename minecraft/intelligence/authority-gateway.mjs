@@ -57,6 +57,7 @@ export function authorize(input, ctx = {}) {
   const state = (ctx.botState || {})[proposal.bot] || {};
   if (state.inRecovery) return deny('bot_in_recovery');
   if (state.busy) return deny('bot_busy');
+  if (state.hold) return deny('bot_hold');
 
   const decision = evaluateProposal(proposal, {
     mode: ctx.mode, house: ctx.house, approvals: ctx.approvals, canaryBot: ctx.canaryBot,
