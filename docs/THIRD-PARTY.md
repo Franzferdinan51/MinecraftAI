@@ -6,6 +6,35 @@ license). Verified against our stack before adoption.
 
 ## Adopted
 
+### HermesCraft bot bodies + agent pattern — `bigph00t/hermescraft` (MIT)
+- Source: https://github.com/bigph00t/hermescraft
+- Idea: the whole body-driver layer — one Mineflayer HTTP bot server per
+  character (`bot/server.js`), the `mc` CLI, per-character Hermes brains
+  (own `HERMES_HOME`, memory, SOUL/prompt), fair-play perception
+  (`mc scene`/`map`/`look`, line-of-sight filtering, directional sound
+  hints), social routing (public chat, `whisper` via native `/msg`,
+  `overheardLog` proximity filter), background tasks (`bg_goto`,
+  `bg_collect`), and the Landfolk behavior rules (3-observation action
+  rule, inventory-first, SUBMERGED response, 1-sentence chat, `mc fill`
+  building workflow) plus the five `skills/minecraft-*.md` guides.
+- What we took: the architecture verbatim (our `minecraft/start-*.sh`
+  launchers assume a hermescraft checkout at `$HOME/games/hermescraft`);
+  the Landfolk rules synthesized into all six fleet SOUL.md contracts;
+  the five skill guides installed per-profile under `skills/gaming/`
+  (role-matched: building→Steve/Reed, farming→Moss, combat→Flint/Ember,
+  survival+navigation+companion→all, civilization+bridge→overseer).
+- Where we are a superset (kept, not upstreamed): 9 extra bot actions
+  (`breed`, `door`, `fish`, `harvest`, `inspect`, `milk`, `shear`, `sow`,
+  `till`), the 26.2 protocol fork (`mineflayer-26.2-fork/`), and our own
+  layers upstream doesn't have (LM Studio bridge, minion controller,
+  `minecraft/intelligence/` safety pipeline, Mission Control UI).
+- Verified: function/CLI diff both directions (upstream-only: none;
+  local-only: the 9 actions above), `lib/` identical, skill bodies
+  ~identical (11–12 diff lines of frontmatter), every skill-referenced
+  `mc` command exists live, agent smoke tests per profile.
+- License: MIT — compatible. Attribution kept here and in
+  `minecraft/start-bot-server.sh`.
+
 ### Furnace workflow — `minecraft-mcp-server` (Apache-2.0)
 - Source: https://github.com/yuniko-software/minecraft-mcp-server (716 stars)
 - Idea: the `smelt-item` tool — put input + auto-selected fuel in a nearby

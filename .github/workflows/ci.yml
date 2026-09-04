@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run intelligence/controller test suite
+        run: node --test tests/*.test.mjs
+
+      - name: Check Node syntax
+        run: |
+          node --check lmstudio-bridge/bridge.mjs
+          node --check lmstudio-bridge/request-policy.mjs
+          node --check minecraft/minion-controller/minion-controller.mjs
+          node --check minecraft/intelligence/shadow-audit.mjs
+          node --check minecraft/intelligence/journal.mjs
+          node --check hermes-overseer/request-builder.mjs
+          node --check webui/server.mjs
+
+      - name: Check shell syntax
+        run: |
+          bash -n minecraft/start-vanilla-server.sh
+          bash -n minecraft/start-bot-server.sh
+          bash -n minecraft/start-bridge.sh
+          bash -n minecraft/start-minion-controller.sh
+          bash -n minecraft/start-geyser.sh
+          bash -n minecraft/stop-all.sh
+          bash -n mineflayer-26.2-fork/install-26.2-fork.sh
+          bash -n scripts/fleet-model.sh
+          bash -n scripts/secret-scan.sh
+
+      - name: Secret scan
+        run: bash scripts/secret-scan.sh
