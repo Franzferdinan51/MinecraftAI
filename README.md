@@ -155,7 +155,7 @@ access.
 
 > **Current status (2026-09-04):** live and verified — DuckBot body
 > `:3001` plus five minion bodies `:3011`–`:3015` all connected at
-> 20/20, controller + bridge healthy with zero LM errors, 120/120
+> 20/20, controller + bridge healthy with zero LM errors, 123/123
 > tests green (`tests/` + `minecraft/bot-server/test/`), secret scan
 > clean. Known benign warnings: the 26.2 protocol fork still logs
 > particle / entity-metadata decode shorts (`sonic_boom`,
@@ -170,10 +170,10 @@ access.
 - [`LICENSE`](./LICENSE) — MIT
 - `docs/` — architecture, running, LM Studio config, troubleshooting, `THIRD-PARTY.md` (hermescraft MIT attribution)
 - `lmstudio-bridge/` — the single-bot LM Studio bridge
-- `minecraft/` — bot server, minion controller, intelligence (contracts, shadow audit, journal), protocol fixtures
+- `minecraft/` — bot server, minion controller, intelligence (contracts, shadow audit, journal), protocol fixtures, `hermescraft/` (vendored landfolk cards, shared contract, skill guides)
 - `hermes-overseer/` — overseer request builder, fleet roster (`AGENTS.md`)
 - `webui/` — Mission Control (desktop + mobile)
-- `tests/` + `minecraft/bot-server/test/` — 120 green (run: `node --test tests/*.test.mjs minecraft/bot-server/test/*.test.js`)
+- `tests/` + `minecraft/bot-server/test/` — 123 green (run: `node --test tests/*.test.mjs minecraft/bot-server/test/*.test.js`)
 - `.github/workflows/ci.yml` — CI: tests, syntax, secret scan
 - `scripts/` — `fleet-model.sh` (switchable brain), `secret-scan.sh` (run before every commit)
 - `mineflayer-26.2-fork/` — patches, data overlay, installer for 26.2

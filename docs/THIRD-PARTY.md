@@ -17,6 +17,14 @@ license). Verified against our stack before adoption.
   `bg_collect`), and the Landfolk behavior rules (3-observation action
   rule, inventory-first, SUBMERGED response, 1-sentence chat, `mc fill`
   building workflow) plus the five `skills/minecraft-*.md` guides.
+- Vendored in-repo: [`minecraft/hermescraft/`](../minecraft/hermescraft/)
+  carries the fleet-adapted core with per-file MIT attribution —
+  `landfolk/*.md` (5 upstream cards player-neutralized + our
+  `duckbot.md` overseer), `SOUL-landfolk.md` (shared contract,
+  machine-enforced twin: `minecraft/intelligence/contracts.mjs`),
+  `skills/minecraft-*.md` (all five guides). Upstream-only parts
+  deliberately not taken: experimental arena/battle, civilization
+  cast, LAN batch launchers.
 - What we took: the architecture verbatim (our `minecraft/start-*.sh`
   launchers assume a hermescraft checkout at `$HOME/games/hermescraft`);
   the Landfolk rules synthesized into all six fleet SOUL.md contracts;
