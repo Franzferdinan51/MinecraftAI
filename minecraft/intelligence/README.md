@@ -16,6 +16,10 @@ touches the network, the filesystem, or a bot queue.
 | `journal.mjs` | Bounded in-memory audit log of sanitized decisions. Stores receipts and summaries only — never prompts, chain-of-thought, or chat. |
 | `authority-gateway.mjs` | `authorize()`: schema → role/capability → bot safety state → policy → lease → budget → idempotency → adapter. `verifyReceipt()` returns `verified` or `needs_review`, never a fabricated completion. |
 | `action-adapters.mjs` | Builds bounded skill-card action *descriptors* (plain data). No HTTP/RCON/shell/queue calls. Raw dig/place/admin have no adapter. |
+| `memory-store.mjs` | Three-scope team memory: expiring episodic, corroborated semantic, review-gated procedural. Only verified receipts and trusted observations are stored. |
+| `learning-policy.mjs` | Procedural promotion needs 3 clean verified uses, a reproducible card, a review record, and explicit player approval. No self-promotion. |
+| `role-skillbook.mjs` | Per-bot active cards from the role registry; learned cards stay under `pendingReview` until approved. |
+| `safety-state.mjs` | `deriveSafetyState()`: deterministic hold/recovery derivation from vitals (health, food, death streak, water, hostiles, stuck, connection, pause). Recovery outranks model plans; missing vitals fail closed. Feeds the gateway's `botState` flags. |
 
 ## Status
 
@@ -28,5 +32,8 @@ touches the network, the filesystem, or a bot queue.
 ```bash
 node --test tests/intelligence-contracts.test.mjs tests/intelligence-policy.test.mjs \
   tests/model-protocol.test.mjs tests/intelligence-journal.test.mjs \
-  tests/intelligence-controller-integration.test.mjs tests/authority-gateway.test.mjs
+  tests/intelligence-controller-integration.test.mjs tests/authority-gateway.test.mjs \
+  tests/memory-store.test.mjs tests/learning-policy.test.mjs \
+  tests/safety-state.test.mjs tests/overseer-contract.test.mjs \
+  tests/webui-intelligence-routes.test.mjs
 ```
