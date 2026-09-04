@@ -38,3 +38,20 @@ test('dashboard ledger never submits proposals or queues actions', () => {
   assert.doesNotMatch(section, /\/api\/queue/);
   assert.doesNotMatch(section, /POST/);
 });
+
+test('dashboard renders fleet safety from the shared state snapshot', () => {
+  assert.match(appSource, /dash-safety/);
+  assert.match(appSource, /function renderDashSafety/);
+});
+
+test('fleet safety is a read-only view over cached bots', () => {
+  const start = appSource.indexOf('function renderDashSafety');
+  assert.notEqual(start, -1);
+  const end = appSource.indexOf('// ── dashboard: queue maintenance ──', start);
+  assert.notEqual(end, -1);
+  const section = appSource.slice(start, end);
+  assert.match(section, /bots/);
+  assert.doesNotMatch(section, /api\('/);
+  assert.doesNotMatch(section, /POST/);
+  assert.doesNotMatch(section, /\/api\/queue/);
+});

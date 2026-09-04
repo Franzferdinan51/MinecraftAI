@@ -319,7 +319,7 @@ function renderDash() {
       loadState();
     };
   });
-  loadDashExtras();
+  loadDashExtras(); renderDashSafety();
 }
 // pause-all / resume-all / pace-all
 document.addEventListener('click', async (e) => {
@@ -465,6 +465,37 @@ function renderDashIntel() {
         + `${ds}</div></div>`;
     }).join('');
   }).catch(() => { box.innerHTML = '<p class="hint">ledger offline</p>'; });
+}
+
+// ── dashboard: fleet safety (display-only mirror of the intelligence
+// safety-state module, which is canonical: criticalHealth 8, lowFood 6.
+// Reads the already-cached state bots snapshot — read-only rendering,
+// no queue access. Recovery outranks model plans.)
+function safetyBadge(b) {
+  if (!b.online) return '⚫ offline';
+  if (b.paused) return '⏸ paused';
+  if (!Number.isFinite(b.health) || !Number.isFinite(b.food)) return '❓ unknown vitals';
+  if (b.health <= 8) return b.food > 0 ? '🔴 recovery: eat' : '🔴 recovery: resupply';
+  if (b.food <= 6) return '🟠 hungry';
+  return '🟢 clear';
+}
+
+function renderDashSafety() {
+  const box = $('#dash-safety');
+  if (!box) return;
+  const rows = Array.isArray(bots) ? bots : [];
+  if (!rows.length) { box.innerHTML = '<p class="hint">waiting for state…</p>'; return; }
+  const order = { '🔴': 0, '❓': 1, '🟠': 2, '⏸': 3, '⚫': 4, '🟢': 5 };
+  const sorted = [...rows].sort((a, b) => (order[safetyBadge(a)[0]] ?? 6) - (order[safetyBadge(b)[0]] ?? 6));
+  box.innerHTML = sorted.map((b) => {
+    const badge = safetyBadge(b);
+    return `<div class="activity-row"><span class="activity-icon">${badge.slice(0, 2)}</span>`
+      + `<div><b>${esc(b.name)}</b><span class="role"> · ${esc(badge.slice(2).trim() || badge)}</span>`
+      + (b.online ? `<div>❤ ${b.health ?? '?'} · 🍖 ${b.food ?? '?'}`
+        + (b.deaths != null ? ` · 💀 ${b.deaths}` : '')
+        + (b.lastDeath ? ` · last: ${esc(b.lastDeath)}` : '') + '</div>' : `<div>${esc(b.error || 'no response')}</div>`)
+      + '</div></div>';
+  }).join('');
 }
 
 // ── dashboard: queue maintenance ──
