@@ -175,6 +175,22 @@ const server = http.createServer(async (req, res) => {
       return json(res, 500, { ok: false, error: 'terrain failed: ' + String(e.message || e).slice(0, 150) });
     }
   }
+  // ── intelligence: observe-only proposal ledger (no dispatch path here) ──
+  if (req.method === 'GET' && url.pathname === '/api/intelligence') {
+    return json(res, 200, await botFetch(3003, '/intelligence'));
+  }
+  if (req.method === 'POST' && url.pathname === '/api/intelligence/proposal') {
+    try {
+      const body = await readBody(req);
+      if (typeof body.source !== 'string' || typeof body.content !== 'string') {
+        return json(res, 400, { ok: false, error: 'need {source, content}' });
+      }
+      return json(res, 200, await botFetch(3003, '/intelligence/proposal', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ source: body.source.slice(0, 32), content: body.content.slice(0, 12000) }),
+      }));
+    } catch { return json(res, 400, { ok: false, error: 'bad json' }); }
+  }
   if (req.method === 'GET' && url.pathname === '/api/team') {
     return json(res, 200, await botFetch(3003, '/team'));
   }

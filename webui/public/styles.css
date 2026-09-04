@@ -154,7 +154,25 @@ body[data-view="map"] #messages,body[data-view="map"] #composer{display:none}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 button,input,select,textarea{font:inherit}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,#map:focus-visible{outline:3px solid #9aa4ff;outline-offset:2px}
 #mobile-nav-toggle,#mobile-viewbar{display:none}
-@media (min-width:1100px){#dash-pane{display:grid!important;grid-template-columns:minmax(360px,1fr) minmax(360px,1fr);gap:12px;align-content:start}#dash-pane .panel{max-width:none;margin:0}#dash-pane .panel:nth-child(1),#dash-pane .panel:nth-child(3),#dash-pane .panel:nth-child(6),#dash-pane .panel:nth-child(7){grid-column:1/-1}}
+@media (min-width:1100px){
+  body[data-view="dash"] #dash-pane{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-content:start;align-items:start;max-width:1360px;margin:0 auto;width:100%}
+  #dash-pane .panel{max-width:none;margin:0;width:auto}
+  #dash-pane .panel:nth-child(1),#dash-pane .panel:nth-child(3),#dash-pane .panel:nth-child(6),#dash-pane .panel:nth-child(7){grid-column:1/-1}
+  #status-cards{gap:14px;padding:20px;align-content:start}
+  #status-cards .card{width:290px;flex:1 1 270px;max-width:340px}
+  #goal-pane .panel,.panel.wide{max-width:760px}
+  #map{max-width:720px}
+  #messages{max-width:1020px;width:100%;margin:0 auto}
+  #composer{max-width:1020px;width:100%;margin:0 auto}
+  #broadcast{max-width:1020px;width:100%;margin:0 auto}
+  #members{width:280px}
+  #channels{width:250px}
+}
+@media (min-width:1600px){
+  body[data-view="dash"] #dash-pane{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);max-width:1720px}
+  body[data-view="dash"] #dash-pane .panel:nth-child(1),body[data-view="dash"] #dash-pane .panel:nth-child(3),body[data-view="dash"] #dash-pane .panel:nth-child(6),body[data-view="dash"] #dash-pane .panel:nth-child(7){grid-column:auto}
+  body[data-view="dash"] #dash-pane .panel:nth-child(1){grid-column:1/-1}
+}
 @media (max-width:1000px){#channels{width:190px}#members{display:none}.vital-grid{grid-template-columns:1fr}}
 @media (max-width:720px){
   body{overflow:hidden}#app{height:100dvh;padding-bottom:64px}#rail,#members{display:none}#main{width:100%;min-width:0}#channels{position:fixed;z-index:20;inset:0 auto 64px 0;width:min(290px,88vw);padding:14px 10px;transform:translateX(-105%);transition:transform .2s ease;box-shadow:8px 0 30px rgba(0,0,0,.45)}body.nav-open #channels{transform:translateX(0)}

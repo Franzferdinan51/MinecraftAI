@@ -29,6 +29,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { createIntelligenceJournal } from '../intelligence/journal.mjs';
 
 const args = process.argv.slice(2);
 let cfgPath = null;
@@ -53,6 +54,12 @@ const LMS_API_KEY = process.env.LMS_API_KEY || '';
 const LMS_HEADERS = { 'content-type': 'application/json', ...(LMS_API_KEY ? { authorization: `Bearer ${LMS_API_KEY}` } : {}) };
 const BRIDGE_PORT = parseInt(process.env.MINION_BRIDGE_PORT || '3003', 10);
 const DEFAULT_MC_API = process.env.MC_API_URL || 'http://127.0.0.1:3001';
+const configuredIntelligenceMode = process.env.INTELLIGENCE_MODE || 'observe';
+const INTELLIGENCE_MODE = ['observe', 'shadow', 'canary', 'active'].includes(configuredIntelligenceMode)
+  ? configuredIntelligenceMode
+  : 'observe';
+const INTELLIGENCE_CANARY = String(process.env.INTELLIGENCE_CANARY || '').slice(0, 20);
+const intelligenceJournal = createIntelligenceJournal();
 // Parallel model calls allowed per user 2026-09-03: all minions think at once.
 // lmsQueueDepth is kept only for health visibility / queued fallback prefix.
 let lmsQueueDepth = 0;
@@ -862,6 +869,38 @@ const server = http.createServer((req, res) => {
   // Team radio: recent controller feed (plans, claims, acks) for Mission Control.
   if (req.method === 'GET' && req.url === '/team') {
     return send(200, { ok: true, messages: teamChat.slice(-30) });
+  }
+  // Observe-only intelligence ledger. Proposals are validated and audited here,
+  // never converted to mc commands or queue actions by this endpoint.
+  if (req.method === 'GET' && req.url === '/intelligence') {
+    return send(200, {
+      ok: true,
+      mode: INTELLIGENCE_MODE,
+      canaryBot: INTELLIGENCE_CANARY || null,
+      dispatchEnabled: false,
+      records: intelligenceJournal.list(),
+    });
+  }
+  if (req.method === 'POST' && req.url === '/intelligence/proposal') {
+    readJsonBody(12000).then((body) => {
+      const source = String(body.source || '').trim();
+      const knownActors = new Set([...minions.map((m) => m.name), 'HermesBot']);
+      if (!knownActors.has(source)) return send(400, { ok: false, error: 'unknown source actor' });
+      if (typeof body.content !== 'string') return send(400, { ok: false, error: 'missing proposal content' });
+      const record = intelligenceJournal.recordModelOutput({
+        source,
+        content: body.content,
+        mode: INTELLIGENCE_MODE,
+        policy: { house: { ...HOUSE, radius: HOUSE_SAFE_RADIUS }, canaryBot: INTELLIGENCE_CANARY },
+      });
+      return send(record.status === 'accepted' ? 200 : 400, {
+        ok: record.status === 'accepted',
+        mode: INTELLIGENCE_MODE,
+        dispatchEnabled: false,
+        record,
+      });
+    }).catch((e) => send(400, { ok: false, error: e.message }));
+    return;
   }
   if (req.method === 'POST' && req.url === '/say') {
     let raw = '';
