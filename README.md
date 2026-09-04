@@ -19,7 +19,7 @@ real credentials, or private notes.
 When you have everything running, the server is on:
 
 | Field           | Value                                      |
-|--|--|
+| --------------- | ------------------------------------------ |
 | Edition         | **Java Edition** only (not Bedrock)       |
 | Minecraft ver.  | 1.21.x (tested on 26.2, protocol 776)     |
 | Address         | `<your-machine>:25565` (LAN/local)         |
