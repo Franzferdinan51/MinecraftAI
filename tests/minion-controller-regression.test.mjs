@@ -22,6 +22,12 @@ function loadFunction(name, dependencies = '') {
 }
 
 const survivalAction = loadFunction('survivalAction');
+const submergedStatus = JSON.stringify({
+  data: { health: 20, food: 20, isDay: false, isInWater: true, nearbyEntities: [] },
+});
+assert.equal(survivalAction(submergedStatus), 'mc stop', 'submerged bot must stop before any other work');
+assert.equal(survivalAction(submergedStatus, 'mc stop'), 'mc jump', 'stopped submerged bot must jump to surface');
+
 const safeLowHealth = JSON.stringify({
   data: { health: 4.3, inventory: [], nearbyEntities: [] },
 });

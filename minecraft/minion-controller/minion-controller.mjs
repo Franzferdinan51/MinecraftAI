@@ -308,6 +308,9 @@ function survivalAction(statusJson, lastAction = '') {
   try { d = JSON.parse(statusJson).data || {}; } catch {}
   const hostile = (d.nearbyEntities || []).find((e) => e.kind === 'hostile');
   const food = (d.inventory || []).some((i) => /bread|apple|carrot|potato|beef|pork|chicken|mutton|fish|stew/i.test(i.name) && i.count > 0);
+  if (d.isInWater === true || /submerged|in water/i.test(String(d.hazard || ''))) {
+    return /mc stop\b/.test(lastAction || '') ? 'mc jump' : 'mc stop';
+  }
   if (hostile && hostile.distance <= 10 && (d.health || 0) >= 10) return `mc fight ${hostile.type}`;
   if ((d.health || 0) < 10 && food) return 'mc eat';
   if (hostile && hostile.distance <= 18) return (d.health || 0) >= 14 ? `mc fight ${hostile.type}` : 'mc flee 20';
@@ -665,7 +668,20 @@ async function tick(minion) {
   entry.pending = true;
   try {
     const apiUrl = minion.api_url || DEFAULT_MC_API;
-    const status = await callMc(['status', '--json'], apiUrl);
+    let status = await callMc(['status', '--json'], apiUrl);
+    // /status carries world data; /task carries transient safety state (water,
+    // task errors, queue). Merge the latter before deciding anything so a
+    // submerged bot cannot be sent back to collect or navigate.
+    try {
+      const taskRes = await fetch(`${apiUrl}/task`, { signal: AbortSignal.timeout(3000) });
+      const taskJson = await taskRes.json();
+      const safetyState = taskJson.state || {};
+      if (safetyState.hazard || safetyState.task_error || safetyState.task_done) {
+        const parsed = JSON.parse(status);
+        parsed.data = { ...(parsed.data || {}), ...safetyState };
+        status = JSON.stringify(parsed);
+      }
+    } catch {}
     try {
       const sd = JSON.parse(status).data || {};
       entry.safetyVitals = { health: sd.health, food: sd.food };
