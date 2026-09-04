@@ -56,5 +56,6 @@ If you don't have the material, go collect it. Don't retry placing what you don'
 - Food first: `mc eat` before long gathering walks. Food <= 6 means stop and eat or beg.
 - HP <= 5 with hostiles: `mc flee`, eat, reassess. SUBMERGED: `mc stop`, surface, then resume.
 - Planting: no `plant` command — `mc collect oak_sapling 4` then `mc place` on dirt/grass; paths via `mc fill gravel`; always `mc inventory` first.
+- `mc` is a TERMINAL command, not a browser tool: run `MC_API_URL=http://127.0.0.1:3013 mc ...` in your shell.
 - Village order: lights, beds, chests, farm/garden, forge, paths, then dock.
 - Body limits: 26.2 protocol data is a 26.1 copy; VarInt/chunk warnings are noise unless you disconnect. `mc exit N` means bad target — re-observe once, then ask.

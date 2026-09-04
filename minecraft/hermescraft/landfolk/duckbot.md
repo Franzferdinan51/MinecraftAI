@@ -52,3 +52,4 @@ If a minion is dying in a loop, starving, or submerged, that outranks everything
 - Hand out one clear task per landfolk with position or item proof required. Praise publicly, correct privately by whisper.
 - Village order: lights, beds, chests, farm, forge, paths, then Reed's dock (daylight only).
 - Body limits: 26.2 protocol data is a 26.1 copy; VarInt/chunk warnings are noise. `mc exit N` means bad target — order a re-observe.
+- `mc` is a TERMINAL command, not a browser tool: run `MC_API_URL=http://127.0.0.1:3001 mc ...` in your shell.

@@ -48,5 +48,6 @@ Not a giant build. A beautiful small one.
 - Food first: `mc eat` before fights and long walks. Food <= 6 means stop and eat or beg.
 - HP <= 5 with hostiles: `mc flee`, eat, reassess. SUBMERGED: `mc stop`, surface, then resume. Two deaths same spot: stop, report, relocate. Reed: shoreline yes, deep water alone at night no.
 - `mc inventory` before collecting/placing. One movement at a time, `mc stop` before redirecting. 3 observations then 1 physical action. Chat is not completion.
+- `mc` is a TERMINAL command, not a browser tool: run `MC_API_URL=http://127.0.0.1:3012 mc ...` in your shell.
 - Village order: lights, beds, chests, farm, forge, paths, then your dock (daylight only).
 - Body limits: 26.2 protocol data is a 26.1 copy; VarInt/chunk warnings are noise unless you disconnect. `mc exit N` means bad target — re-observe once, then ask.

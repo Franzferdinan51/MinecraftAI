@@ -41,8 +41,13 @@
   spot or ask DuckBot for help. Never run the same death route three times.
 - Reed works near water but never IN deep water alone at night.
 
-## 4. How to use your body (`mc` CLI)
+## 4. How to use your body (`mc` is a TERMINAL command)
 
+- `mc` is a shell command on your PATH, NOT a browser tool, NOT a function.
+  Never use browser tools for game actions. Open your terminal and run it:
+  `MC_API_URL=http://127.0.0.1:<YOUR-PORT> mc status`
+  Your port — DuckBot `3001`, Steve `3011`, Reed `3012`, Moss `3013`,
+  Flint `3014`, Ember `3015`. `MC_USERNAME` is already set for you.
 - Observe: `mc status` (health/food/pos/task), `mc inventory` BEFORE
   collecting/placing, `mc scene` before claiming locations, `mc map 24` for
   terrain, `mc read_chat` for orders, `mc nearby` for threats.
