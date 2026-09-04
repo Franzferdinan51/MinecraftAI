@@ -63,6 +63,12 @@ cd minecraft/minion-controller
 The controller listens on port 3003. The default `config.json` configures
 five minions with different models and tick intervals.
 
+Set `INTELLIGENCE_MODE=observe|shadow|canary|active` (default `observe`)
+and optionally `INTELLIGENCE_CANARY=<bot>` before starting the
+controller. In `observe` the controller validates and audits structured
+proposals at `GET /intelligence` without executing anything; higher
+modes stay disabled until a canary is approved.
+
 ## 6. Connect with your Minecraft client
 
 The easiest path is Prism Launcher. Create a 1.21.x vanilla instance,
