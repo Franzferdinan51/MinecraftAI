@@ -1,0 +1,10 @@
+{
+  "mode": "minecraft",
+  "name": "Minecraft Core",
+  "driver": "../../bot-server/server.mjs",
+  "protocol": "fixture-pinned-26.2",
+  "body_ports": [3001, 3011, 3012, 3013, 3014, 3015],
+  "capabilities": ["fair-play perception", "allowlisted actions", "social routing", "persistent task state"],
+  "activation": "managed by the existing Landfolk fleet and controller",
+  "launch_policy": "manual-review-required"
+}

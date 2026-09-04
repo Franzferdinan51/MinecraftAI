@@ -1,0 +1,10 @@
+{
+  "mode": "play",
+  "name": "Play / Server Flow",
+  "server_port": 25565,
+  "bedrock_port": 19132,
+  "body_driver": "../../bot-server/server.mjs",
+  "launchers": ["minecraft/start-bot-server.sh", "minecraft/start-minion-controller.sh"],
+  "activation": "requires deliberate operator review; no WebUI auto-launch",
+  "launch_policy": "manual-review-required"
+}

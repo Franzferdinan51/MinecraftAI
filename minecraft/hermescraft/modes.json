@@ -33,14 +33,16 @@
       "name": "Minecraft Core",
       "upstream_entry": "SOUL-minecraft.md / bot/server.js / bin/mc",
       "status": "active",
-      "description": "Embodied Mineflayer body, fair-play perception, actions, background tasks, social routing, memory, and screenshot metadata."
+      "description": "Embodied Mineflayer body, fair-play perception, actions, background tasks, social routing, memory, and screenshot metadata.",
+      "config": "modes/minecraft/config.json"
     },
     {
       "id": "play",
       "name": "Play / Server Flow",
       "upstream_entry": "play.sh / server/start.sh",
       "status": "documented",
-      "description": "Upstream play and server helpers are documented; MinecraftAI keeps its fixture-pinned 26.2 server and one-bot canary path."
+      "description": "Upstream play and server helpers are documented; MinecraftAI keeps its fixture-pinned 26.2 server and one-bot canary path.",
+      "config": "modes/play/config.json"
     }
   ],
   "fleet": [
