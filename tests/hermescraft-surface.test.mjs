@@ -70,7 +70,8 @@ test('hermescraft core: all upstream modes are cataloged and Mission Control exp
     assert.ok(existsSync(join(hc, modes.modes.find((m) => m.id === id).config)), `${id} config missing`);
   }
   assert.match(read(join(root, 'webui/server.mjs')), /api\/hermescraft/);
-  assert.match(read(join(root, 'webui/public/index.html')), /HermesCraft modes/);
+  assert.match(read(join(root, 'webui/server.mjs')), /hermesCraftReadiness/);
+  assert.match(read(join(root, 'webui/public/index.html')), /Runtime readiness/);
   assert.match(read(join(root, 'webui/public/app.js')), /loadHermesCraft/);
   assert.match(read(join(root, 'webui/public/styles.css')), /mode-card/);
 });

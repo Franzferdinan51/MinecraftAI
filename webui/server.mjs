@@ -8,6 +8,7 @@ import { renderTerrain } from './terrain.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const HERMESCRAFT_MANIFEST = JSON.parse(fs.readFileSync(path.join(ROOT, '..', 'minecraft', 'hermescraft', 'modes.json'), 'utf8'));
+const HERMESCRAFT_ROOT = path.join(ROOT, '..', 'minecraft', 'hermescraft');
 const PORT = Number(process.env.WEBUI_PORT || 3100);
 
 const BOTS = [
@@ -66,13 +67,29 @@ function readBody(req) {
   });
 }
 
+async function hermesCraftReadiness() {
+  const botChecks = await Promise.all(BOTS.map(async (b) => {
+    const r = await botFetch(b.port, '/health');
+    return { name: b.name, online: r.ok === true && r.connected === true };
+  }));
+  const upstreamBotDir = path.join(process.env.HERMESCRAFT_BOT_DIR || path.join(process.env.HOME || '', 'games', 'hermescraft', 'bot'));
+  const checks = {
+    catalog: true,
+    mode_configs: ['companion', 'landfolk', 'civilization'].every((id) => fs.existsSync(path.join(HERMESCRAFT_ROOT, 'modes', id, 'config.json'))),
+    landfolk_bodies: botChecks.filter((b) => b.name !== 'DuckBot').every((b) => b.online),
+    duckbot_body: botChecks.find((b) => b.name === 'DuckBot')?.online === true,
+    upstream_body_driver: fs.existsSync(path.join(upstreamBotDir, 'server.js')),
+  };
+  return { active_mode: 'landfolk', checks, bots: botChecks };
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const botByName = (n) => BOTS.find((b) => b.name === n);
 
   // ── HermesCraft modes/capabilities: static, safe, no runtime secrets ──
   if (req.method === 'GET' && url.pathname === '/api/hermescraft') {
-    return json(res, 200, { ok: true, ...HERMESCRAFT_MANIFEST });
+    return json(res, 200, { ok: true, ...HERMESCRAFT_MANIFEST, readiness: await hermesCraftReadiness() });
   }
   // ── state: one snapshot for the whole village ──
   if (req.method === 'GET' && url.pathname === '/api/state') {

@@ -272,6 +272,9 @@ async function loadHermesCraft() {
     </article>`).join('');
     $('#mode-capabilities').innerHTML = (r.capabilities || []).map((x) => `<span class="capability">✓ ${esc(x)}</span>`).join('');
     $('#mode-commands').innerHTML = Object.entries(r.command_surface || {}).map(([group, commands]) => `<div class="command-group"><b>${esc(group.replace(/_/g, ' '))}</b><div>${commands.map((x) => `<code>${esc(x)}</code>`).join('')}</div></div>`).join('');
+    const readiness = r.readiness || {};
+    const labels = { catalog: 'mode catalog', mode_configs: 'mode configs', upstream_body_driver: 'upstream body driver', duckbot_body: 'DuckBot body', landfolk_bodies: 'five Landfolk bodies' };
+    $('#mode-readiness').innerHTML = `<div class="readiness-summary"><b>Active mode:</b> ${esc(readiness.active_mode || 'unknown')}<span>${Object.values(readiness.checks || {}).filter(Boolean).length}/${Object.keys(readiness.checks || {}).length} checks passing</span></div>` + Object.entries(readiness.checks || {}).map(([key, ok]) => `<div class="readiness-row ${ok ? 'ready' : 'blocked'}"><span>${ok ? '✓' : '!'}</span><b>${esc(labels[key] || key)}</b><span>${ok ? 'ready' : 'not ready'}</span></div>`).join('');
     $('#mode-fleet').innerHTML = (r.fleet || []).map((b) => `<div class="fleet-agent"><span class="avatar" style="background:${botColor(b.name)}">${esc(b.name[0])}</span><div><b>${esc(b.name)}</b><span>${esc(b.role)} · body :${b.body_port} · ${esc(b.profile)}</span></div></div>`).join('');
   } catch (e) {
     cards.innerHTML = `<p class="hint">HermesCraft catalog unavailable: ${esc(e.message)}</p>`;
