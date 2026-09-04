@@ -402,6 +402,10 @@ except: print(sys.argv[1])
         pretty "$(api_post '/action/stop')"
         ;;
 
+    surface)
+        pretty "$(api_post '/action/surface')"
+        ;;
+
     # Mining
     collect|mine|c)
         BLOCK="${1:?Usage: mc collect BLOCK [count]}"

@@ -1403,6 +1403,17 @@ const ACTIONS = {
     return { result: `Looking at ${x}, ${y}, ${z}` };
   },
 
+  async surface() {
+    const b = ensureBot();
+    b.pathfinder.setGoal(null);
+    if (!b.entity.isInWater) return { result: 'Already on dry ground.' };
+    b.setControlState('jump', true);
+    await sleep(3000);
+    b.setControlState('jump', false);
+    b.pathfinder.setGoal(null);
+    return { result: b.entity.isInWater ? 'Still in water after bounded surface attempt.' : 'Reached the water surface/dry ground.' };
+  },
+
   async stop() {
     const b = ensureBot();
     b.pathfinder.setGoal(null);
