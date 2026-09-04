@@ -30,28 +30,49 @@ server, same contract, different bodies, roles, and memories.
   goals).
 - `hermes profile describe`: one-line role for the kanban router.
 
-## Why gemma-4-12b-qat (local, via LM Studio)
+## Why ornith-1.5-9b (local, via LM Studio)
 
-- `ornith-1.5-9b` (bridge model) reports 50,176 tokens — Hermes needs
-  ≥ 64,000. Rejected at init.
-- `google/gemma-4-26b-a4b-qat` and `ornith-1.5-35b-a3b` fail to load in
-  LM Studio (`Engine protocol startup was aborted`). Left alone — the
-  live bridge depends on a healthy LM Studio.
-- `nvidia/nemotron-3-nano-4b` reports 8,192 — rejected as main and as
-  auxiliary compression model.
-- `gemma-4-12b-qat` meets the 64K bar, loads, and follows the
-  observe → act → report loop. Verified per agent with
-  `hermes chat -q "Run 'mc status' …"` under each profile's
-  `HERMES_HOME`.
+Fleet brain as of 2026-09-03: `ornith-1.5-9b`, the same model that drives
+the minion-controller bridge loop — one resident model serves both the
+autonomous ticks and the six agent minds.
 
-## Smoke-test log (2026-09-03)
+- True architecture window verified in the GGUF header (`qwen35`,
+  `context_length = 262144`). LM Studio currently serves it at 50,176
+  (its load-time setting), so each profile sets
+  `model.context_length=262144` — the architecture-true value, never
+  invented. Hermes requires ≥ 64,000 to boot.
+- Caveat: short observe → act loops (the fleet's normal pattern) stay far
+  under the server's 50K loaded window. Marathon sessions would need LM
+  Studio's loaded context raised (VRAM permitting — a future change, not
+  done now to protect the live bridge).
+- Earlier candidates: `gemma-4-12b-qat` meets 64K and served 4/6 agents
+  (kept as fallback); `gemma-4-26b` / `ornith-1.5-35b` fail to load in
+  LM Studio; `nemotron-3-nano-4b` (8K) rejected as main and compressor.
 
-- Steve ✅ 20/20 @ 51.4,62,78.5 · Moss ✅ 20/20 @ -15.3,68,25.7 ·
-  Flint ✅ 7.2/20 @ 48.5,63,77.6 · GemmaBot ✅ 16.3/20 @ 47.5,63,84.5
-- Reed/Ember: configured identically; first attempts hit a transient
-  LM Studio engine flap (12b worker refusing reload after serving four
-  agents). Retried after engine rest — see commit history for final
-  status. Steady-state config is uniform; no per-agent divergence.
+## Switching models (fleet stays changeable)
+
+One command, all six profiles — `hermes config set` under the hood,
+never hand-edited:
+
+```bash
+scripts/fleet-model.sh ornith-1.5-9b 262144
+scripts/fleet-model.sh google/gemma-4-12b-qat   # fallback, no override needed
+```
+
+Then verify each mind against its body:
+
+```bash
+HERMES_HOME=~/.hermes/profiles/minecraft-moss hermes chat -q \
+  "Run 'mc status' via the terminal, then reply with exactly: your name, health, food, and position. Nothing else."
+```
+
+## Smoke-test log (2026-09-03, ornith-1.5-9b)
+
+- Steve ✅ · Reed ✅ 20/20 @ 52.5,63,77.5 · Moss ✅ 20/20 @ -15.3,68,25.7 ·
+  Flint ✅ 20/20 @ 50.5,63,85.5 · Ember ✅ 20/20 @ 51.4,62,78.5 ·
+  GemmaBot ✅ 16.3/20 @ 47.5,63,84.5 (still recovering — rescue first).
+- 6/6 minds verified against their own bodies. Reed/Ember's earlier
+  `gemma-4-12b` engine flap is moot: the resident 9b loads every time.
 
 ## Run one
 
