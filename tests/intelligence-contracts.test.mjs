@@ -11,9 +11,9 @@ import { CAPABILITIES, capabilityFor } from '../minecraft/intelligence/capabilit
 import { SKILL_CARDS, skillCardFor } from '../minecraft/intelligence/skill-cards.mjs';
 
 test('defines each HermesCraft actor with one bounded role', () => {
-  assert.deepEqual(Object.keys(ACTORS).sort(), ['Ember', 'Flint', 'HermesBot', 'Moss', 'Reed', 'Steve']);
+  assert.deepEqual(Object.keys(ACTORS).sort(), ['DuckBot', 'Ember', 'Flint', 'Moss', 'Reed', 'Steve']);
   for (const actor of Object.values(ACTORS)) assert.equal(actor.agentKind, 'hermescraft-agent');
-  assert.equal(ACTORS.HermesBot.role, 'overseer');
+  assert.equal(ACTORS.DuckBot.role, 'overseer');
   assert.equal(ACTORS.Reed.role, 'builder');
   assert.equal(ACTORS.Ember.role, 'scout');
 });

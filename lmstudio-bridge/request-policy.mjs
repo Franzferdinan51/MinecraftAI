@@ -2,7 +2,7 @@
 // classify individual terminated generations, count consecutive failures,
 // and open a bounded cooldown that skips model calls so the bridge falls
 // back to deterministic survival actions instead of hammering a sick
-// model server or idling HermesBot for whole ticks. No I/O.
+// model server or idling DuckBot for whole ticks. No I/O.
 
 export function isTerminatedError(status, bodyText) {
   return status === 400 && /terminated/i.test(String(bodyText || ''));

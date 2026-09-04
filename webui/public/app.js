@@ -275,7 +275,7 @@ function renderDash() {
       <div class="vital-head"><b style="color:${b.color}">${esc(b.name)}</b>
         <span class="dot ${b.online ? 'on' : 'off'}">● ${b.online ? 'online' : 'offline'}</span>
         ${b.paused ? '<span class="paused-tag">PAUSED</span>' : ''}</div>
-      <div class="role">${esc(b.role)} · ${b.ticks != null ? b.ticks + ' thinks' : (b.name === 'HermesBot' ? 'bridge-driven' : '?')}</div>
+      <div class="role">${esc(b.role)} · ${b.ticks != null ? b.ticks + ' thinks' : (b.name === 'DuckBot' ? 'bridge-driven' : '?')}</div>
       ${b.online ? `
       <div class="vital-grid">
         <div>❤ ${b.health ?? '?'}${bar(b.health)}</div>
@@ -288,7 +288,7 @@ function renderDash() {
       <div class="vital-doing">${esc((b.last_action || '—').slice(0, 140))}</div>` : `<div class="role">${esc(b.error || 'no response')}</div>`}
       <div class="vital-ops">
         <button data-dinv="${esc(b.name)}" type="button">🎒 Bags</button>
-        ${b.name === 'HermesBot' ? '<span class="role">pace + pause live in the bridge</span>' : `
+        ${b.name === 'DuckBot' ? '<span class="role">pace + pause live in the bridge</span>' : `
         <select data-pace="${esc(b.name)}">${PACES.map(([ms, label]) => `<option value="${ms}" ${b.interval_ms === ms ? 'selected' : ''}>${label}</option>`).join('')}</select>
         <button class="pause-btn ${b.paused ? 'on' : ''}" data-pause="${esc(b.name)}" type="button">${b.paused ? '▶ Resume' : '⏸ Pause'}</button>
         <button data-quick="eat|${esc(b.name)}" type="button">🍖</button>
@@ -324,7 +324,7 @@ function renderDash() {
 // pause-all / resume-all / pace-all
 document.addEventListener('click', async (e) => {
   if (e.target && e.target.id === 'pause-all') {
-    for (const b of bots) if (!b.paused && b.name !== 'HermesBot') await api('/api/pause', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: b.name, paused: true }) });
+    for (const b of bots) if (!b.paused && b.name !== 'DuckBot') await api('/api/pause', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: b.name, paused: true }) });
     toast('fleet paused'); loadState().then(renderDash);
   }
   if (e.target && e.target.id === 'resume-all') {
@@ -334,7 +334,7 @@ document.addEventListener('click', async (e) => {
 });
 document.addEventListener('change', async (e) => {
   if (e.target && e.target.id === 'pace-all' && e.target.value) {
-    for (const b of bots) if (b.name !== 'HermesBot') await api('/api/interval', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: b.name, interval_ms: Number(e.target.value) }) });
+    for (const b of bots) if (b.name !== 'DuckBot') await api('/api/interval', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: b.name, interval_ms: Number(e.target.value) }) });
     toast('fleet pace updated'); e.target.value = ''; loadState().then(renderDash);
   }
 });
@@ -514,7 +514,7 @@ function renderDashModels(r) {
   if (!r?.ok || !r.models?.length) { box.innerHTML = `<p class="hint">LM Studio model catalog unavailable: ${esc(r?.error || 'no models')}</p>`; return; }
   const opts = r.models.map((m) => `<option value="${esc(m.id)}">${esc(m.id)}${m.context_length ? ` · ctx ${m.context_length}` : ''}</option>`).join('');
   box.innerHTML = `<div class="model-toolbar"><div><b>LM Studio models</b><span class="role"> ${r.models.length} exposed · exact IDs from /v1/models</span></div><button id="refresh-models" type="button">↻ refresh</button></div>` +
-    bots.map((b) => `<div class="model-row"><span class="model-name" style="color:${b.color}">${esc(b.name)}</span><select data-model-bot="${esc(b.name)}"><option value="">${esc(b.model || (b.name === 'HermesBot' ? 'bridge current' : 'current / startup'))}</option>${opts}</select><span class="role">${b.name === 'HermesBot' ? 'live bridge switch' : 'live next think'}</span></div>`).join('');
+    bots.map((b) => `<div class="model-row"><span class="model-name" style="color:${b.color}">${esc(b.name)}</span><select data-model-bot="${esc(b.name)}"><option value="">${esc(b.model || (b.name === 'DuckBot' ? 'bridge current' : 'current / startup'))}</option>${opts}</select><span class="role">${b.name === 'DuckBot' ? 'live bridge switch' : 'live next think'}</span></div>`).join('');
   box.querySelector('#refresh-models')?.addEventListener('click', () => loadDashExtras());
   box.querySelectorAll('[data-model-bot]').forEach((sel) => sel.addEventListener('change', async () => {
     if (!sel.value) return;

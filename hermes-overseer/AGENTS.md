@@ -7,7 +7,7 @@ server, same contract, different bodies, roles, and memories.
 
 | Agent profile         | Role     | Body (MC_API_URL)         |
 |-----------------------|----------|---------------------------|
-| `minecraft-gemma-bot` | overseer | HermesBot — port 3001     |
+| `minecraft-gemma-bot` | overseer | DuckBot — port 3001     |
 | `minecraft-steve`     | foreman  | Steve — port 3011         |
 | `minecraft-reed`      | builder  | Reed — port 3012          |
 | `minecraft-moss`      | farmer   | Moss — port 3013          |
@@ -20,10 +20,11 @@ server, same contract, different bodies, roles, and memories.
   `model.provider=custom`, `model.base_url` → local LM Studio `/v1`,
   credentials via the LM Studio placeholder key in each profile's own
   config (set with `hermes config set`, never hand-edited),
-  `model.default=google/gemma-4-12b-qat`.
+  `model.default=ornith-1.5-9b` (see "Why ornith" below; switchable via
+  `scripts/fleet-model.sh`).
 - `.env`: `MC_API_URL=http://localhost:<port>` — binds the agent to ITS
   body. Default `mc` target is port 3001, so this is what stops every
-  agent from driving HermesBot.
+  agent from driving DuckBot.
 - `SOUL.md`: original Landfolk persona + appended `HermesCraft Agent
   Contract` (role, Tier 1/2/3 capability tiers, 8-block house radius at
   (50,63,85), dry-ground-only, in-game-chat coordination, safety beats

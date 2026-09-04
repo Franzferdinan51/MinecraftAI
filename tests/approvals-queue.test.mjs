@@ -10,7 +10,7 @@ const REQUEST = Object.freeze({
   skill: 'small-approved-build',
   summary: 'Build 5x5 depot pad outside protected radius',
   riskTier: 3,
-  requestedBy: 'HermesBot',
+  requestedBy: 'DuckBot',
 });
 
 function freshQueue() {

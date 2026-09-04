@@ -2,7 +2,7 @@ import { capabilityFor } from './capabilities.mjs';
 import { skillCardFor } from './skill-cards.mjs';
 
 export const ACTORS = Object.freeze({
-  HermesBot: { agentKind: 'hermescraft-agent', role: 'overseer' },
+  DuckBot: { agentKind: 'hermescraft-agent', role: 'overseer' },
   Steve: { agentKind: 'hermescraft-agent', role: 'foreman' },
   Reed: { agentKind: 'hermescraft-agent', role: 'builder' },
   Moss: { agentKind: 'hermescraft-agent', role: 'farmer' },

@@ -1,6 +1,6 @@
 # Hermes overseer boundary (`hermes-overseer/`)
 
-HermesBot may use Hermes planning, memory, research, and multi-agent
+DuckBot may use Hermes planning, memory, research, and multi-agent
 strengths — but only through this narrow, validated boundary. Hermes is
 treated as an external senior specialist: bounded redacted requests go
 out, proposal-only responses come back, and everything re-enters the

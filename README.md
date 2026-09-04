@@ -18,7 +18,7 @@ When you have everything running, the server is on:
 | Edition         | **Java Edition** only (not Bedrock)       |
 | Minecraft ver.  | 1.21.x (tested on 26.2, protocol 776)     |
 | Address         | `<your-machine>:25565` (LAN/local)         |
-| Username        | `HermesBot` (the AI's in-world identity)   |
+| Username        | `DuckBot` (the AI's in-world identity)   |
 | Auth mode       | `online-mode=false` (offline / LAN friendly) |
 | Bot bridge      | `http://127.0.0.1:3001/` (`mc` CLI talks here) |
 | LM Studio bridge| `http://127.0.0.1:3002/` (inspector)      |
@@ -58,7 +58,7 @@ Three things, layered:
    minion has its own Mineflayer process, Minecraft username, API port,
    inventory, location, model, and tick interval. This is what populates
    the world with actual AI players; it does not send five prompts to
-   HermesBot.
+   DuckBot.
 
 ## Quick start
 
@@ -118,7 +118,7 @@ HermesCraft team. The implementation plan is
 
 The roadmap gives each character explicit, bounded powers:
 
-- **HermesBot:** overseer planning, incident review, research requests,
+- **DuckBot:** overseer planning, incident review, research requests,
   work-board design, shared-memory synthesis, and skill recommendations.
 - **Steve:** construction foreman and material preflight.
 - **Reed:** approved bounded build cards and completion verification.

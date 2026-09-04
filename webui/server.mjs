@@ -10,7 +10,7 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.WEBUI_PORT || 3100);
 
 const BOTS = [
-  { name: 'HermesBot', port: 3001, role: 'Coordinator', color: '#5865f2' },
+  { name: 'DuckBot', port: 3001, role: 'Coordinator', color: '#5865f2' },
   { name: 'Steve', port: 3011, role: 'Planner · Carpenter', color: '#57a25c' },
   { name: 'Reed', port: 3012, role: 'Builder', color: '#c98a3b' },
   { name: 'Moss', port: 3013, role: 'Farmer', color: '#6abe30' },
@@ -18,7 +18,7 @@ const BOTS = [
   { name: 'Ember', port: 3015, role: 'Scout · Defender', color: '#e0643a' },
 ];
 const YARD = {
-  HermesBot: [50, 63, 85], Steve: [44, 63, 85], Reed: [56, 63, 85],
+  DuckBot: [50, 63, 85], Steve: [44, 63, 85], Reed: [56, 63, 85],
   Moss: [50, 63, 79], Flint: [50, 63, 91], Ember: [47, 63, 82],
 };
 // Web-sent messages, echoed into the chat pane instantly (bots also hear them
@@ -82,7 +82,7 @@ const server = http.createServer(async (req, res) => {
       ]);
       const d = st.data || {};
       const c = ctrlByName[b.name] || {};
-      // HermesBot runs via the bridge, not the controller — no thinks/last_action.
+      // DuckBot runs via the bridge, not the controller — no thinks/last_action.
       // Fall back to its live task so the dashboard never shows "?".
       const liveTask = task.data?.task;
       const fallbackAction = liveTask
@@ -90,7 +90,7 @@ const server = http.createServer(async (req, res) => {
         : 'bridge-driven — see team radio';
       return {
         name: b.name, role: c.role || b.role, color: b.color, port: b.port,
-        model: b.name === 'HermesBot' ? (bridge.model || null) : (c.model || null),
+        model: b.name === 'DuckBot' ? (bridge.model || null) : (c.model || null),
         online: st.ok === true, paused: !!c.paused, interval_ms: c.interval_ms || null, ticks: c.ticks ?? null,
         last_action: ((c.last_action || '') || fallbackAction).slice(0, 160),
         health: d.health ?? null, food: d.food ?? null,
@@ -138,7 +138,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const bot = botByName(body.name);
       if (!bot || !String(body.model || '').trim()) return json(res, 400, { ok: false, error: 'unknown bot or missing model' });
-      const target = bot.name === 'HermesBot' ? 3002 : 3003;
+      const target = bot.name === 'DuckBot' ? 3002 : 3003;
       const r = await botFetch(target, '/model', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: bot.name, model: String(body.model).trim() }) });
       return json(res, r.ok ? 200 : 400, r);
     } catch { return json(res, 400, { ok: false, error: 'bad json' }); }
@@ -211,7 +211,7 @@ const server = http.createServer(async (req, res) => {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ from: 'Duckets (web)', message }),
       });
-      const queueAll = (action, argsFor) => Promise.all(BOTS.filter((b) => b.name !== 'HermesBot').map((b) =>
+      const queueAll = (action, argsFor) => Promise.all(BOTS.filter((b) => b.name !== 'DuckBot').map((b) =>
         botFetch(b.port, '/queue', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action, args: argsFor(b), by: 'Duckets (web)' }) })));
       let out;
       if (op === 'come') out = await sayAll('come with me');
@@ -282,7 +282,7 @@ const server = http.createServer(async (req, res) => {
       const chatLines = (pub.data?.messages || []).slice(-12).map((m) => `<${m.from}> ${m.message}`).join('\n');
       const system = `You are the village overseer AI for a Minecraft world called hermescraft, speaking to the player Duckets in a Discord-like dashboard. Be short, warm, and concrete — no robotic status dumps.\nCurrent village goal: ${ctrl.goal || 'build a safe starter village'}.\nBots right now:\n${botLines || '(controller offline)'}\nRecent in-game chat:\n${chatLines || '(quiet)'}\nAnswer questions about the village, explain what bots are doing and why, and suggest commands the player can give (they can set the village goal, DM a bot, or ask for eat/sleep/yard). If asked to DO something, say what you'll pass along in one line — the dashboard handles actions separately.`;
       // Orders: the model may append a ```orders fence with actions for us to run.
-      const systemOrders = system + `\nYou can also ACT. To act, end your reply with a fenced block like:\n\`\`\`orders\n[{"do":"say","message":"come with me"},{"do":"queue","bot":"Moss","action":"till","args":{"count":4}},{"do":"goal","goal":"..."},{"do":"pause","bot":"Flint","paused":true}]\n\`\`\`\nRules: "say" sends chat to ALL bots unless "target" names one bot (must be HermesBot, Steve, Reed, Moss, Flint or Ember). "queue" action must be one of bg_goto, goto_near, collect, craft, smelt, eat, sleep_bed, till, sow, harvest, breed, shear, milk, fish, follow, flee, wait. Only include orders the user actually asked for; at most 6.`;
+      const systemOrders = system + `\nYou can also ACT. To act, end your reply with a fenced block like:\n\`\`\`orders\n[{"do":"say","message":"come with me"},{"do":"queue","bot":"Moss","action":"till","args":{"count":4}},{"do":"goal","goal":"..."},{"do":"pause","bot":"Flint","paused":true}]\n\`\`\`\nRules: "say" sends chat to ALL bots unless "target" names one bot (must be DuckBot, Steve, Reed, Moss, Flint or Ember). "queue" action must be one of bg_goto, goto_near, collect, craft, smelt, eat, sleep_bed, till, sow, harvest, breed, shear, milk, fish, follow, flee, wait. Only include orders the user actually asked for; at most 6.`;
       const r = await fetch('http://127.0.0.1:1234/v1/chat/completions', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ model: 'ornith-1.5-9b', messages: [{ role: 'system', content: systemOrders }, { role: 'user', content: question }], max_tokens: 600, temperature: 0.7 }),
@@ -459,7 +459,7 @@ const server = http.createServer(async (req, res) => {
   }
   // ── clear every bot queue, deliberately separate from stop/cancel ──
   if (req.method === 'POST' && url.pathname === '/api/queues/clear') {
-    const results = await Promise.all(BOTS.filter((b) => b.name !== 'HermesBot').map(async (b) => [b.name, await botFetch(b.port, '/queue/clear', { method: 'POST' })]));
+    const results = await Promise.all(BOTS.filter((b) => b.name !== 'DuckBot').map(async (b) => [b.name, await botFetch(b.port, '/queue/clear', { method: 'POST' })]));
     webLog.push({ time: Date.now(), from: 'Duckets (web)', message: '[control] cleared all bot queues', private: false, channel: 'public' });
     return json(res, 200, { ok: results.every(([, r]) => r.ok !== false), results: Object.fromEntries(results) });
   }

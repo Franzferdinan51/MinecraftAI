@@ -73,7 +73,7 @@ modes stay disabled until a canary is approved.
 
 The easiest path is Prism Launcher. Create a 1.21.x vanilla instance,
 install it once so it generates `~/.minecraft/`, then point it at
-`localhost:25565` and join. The bot is `HermesBot`; you'll see it move
+`localhost:25565` and join. The bot is `DuckBot`; you'll see it move
 around as the model issues commands.
 
 ## 7. Bedrock players (phone, console, etc.)
@@ -107,7 +107,7 @@ translator in front of the Java server.
 #    <this-machine>:19132, port 19132, leave the rest default.
 #
 # 5. The Bedrock player shows up as <name> in the Java world and as
-#    a Bedrock-prefixed UUID on the Java side. HermesBot will see them
+#    a Bedrock-prefixed UUID on the Java side. DuckBot will see them
 #    in chat and can address them by name.
 ```
 

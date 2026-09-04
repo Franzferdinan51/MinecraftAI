@@ -5,7 +5,7 @@ export function buildKnownNames(myName = '', nearbyNames = []) {
   return [...new Set([
     ...CURRENT_CAST,
     ...LEGACY_CAST,
-    'hermesbot',
+    'duckbot',
     'hermes',
     'bot',
     'all',
@@ -53,6 +53,7 @@ export function broadcastMentionsMe(messageBody, myName) {
   const lower = String(messageBody || '').toLowerCase().trim();
   const self = String(myName || '').toLowerCase();
   if (self && lower.startsWith(self)) return self;
+  if (lower.startsWith('duckbot')) return 'duckbot';
   if (lower.startsWith('hermes')) return 'hermes';
   if (lower.startsWith('bot')) return 'bot';
   return null;

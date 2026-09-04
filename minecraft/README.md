@@ -26,7 +26,7 @@ players, all using `ornith-1.5-9b`:
 - Flint → API port 3014
 - Ember → API port 3015
 
-The primary HermesBot remains on API port 3001. Each minion API process
+The primary DuckBot remains on API port 3001. Each minion API process
 uses the same Java server port 25565 but a different offline username.
 
 These are convenience wrappers. See `docs/RUNNING.md` for the

@@ -904,7 +904,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && req.url === '/intelligence/proposal') {
     readJsonBody(12000).then((body) => {
       const source = String(body.source || '').trim();
-      const knownActors = new Set([...minions.map((m) => m.name), 'HermesBot']);
+      const knownActors = new Set([...minions.map((m) => m.name), 'DuckBot']);
       if (!knownActors.has(source)) return send(400, { ok: false, error: 'unknown source actor' });
       if (typeof body.content !== 'string') return send(400, { ok: false, error: 'missing proposal content' });
       const record = intelligenceJournal.recordModelOutput({

@@ -13,7 +13,7 @@
  * Environment:
  *   MC_HOST       Minecraft server host (default: localhost)
  *   MC_PORT       Minecraft server port (default: 25565)
- *   MC_USERNAME   Bot username (default: HermesBot)
+ *   MC_USERNAME   Bot username (default: DuckBot)
  *   MC_AUTH       Auth type: offline|microsoft (default: offline)
  *   API_PORT      HTTP API port (default: 3001)
  */
@@ -56,7 +56,7 @@ import {
 
 // Per-bot locations file to prevent race conditions in multi-agent mode
 const DATA_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'data');
-const LOCATIONS_FILE = path.join(DATA_DIR, `locations-${(process.env.MC_USERNAME || 'HermesBot').toLowerCase()}.json`);
+const LOCATIONS_FILE = path.join(DATA_DIR, `locations-${(process.env.MC_USERNAME || 'DuckBot').toLowerCase()}.json`);
 
 function loadLocations() {
   try { return JSON.parse(fs.readFileSync(LOCATIONS_FILE, 'utf8')); }
@@ -76,7 +76,7 @@ const config = {
   mc: {
     host: process.env.MC_HOST || 'localhost',
     port: parseInt(process.env.MC_PORT || '25565'),
-    username: process.env.MC_USERNAME || 'HermesBot',
+    username: process.env.MC_USERNAME || 'DuckBot',
     auth: process.env.MC_AUTH || 'offline',
   },
   api: {

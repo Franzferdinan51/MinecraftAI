@@ -74,7 +74,7 @@ test('queue-approved tier 3 stays proposal-only through the gateway', () => {
     capability: 'build_footprint.propose',
     summary: 'Depot pad footprint proposal',
     riskTier: 3,
-    requestedBy: 'HermesBot',
+    requestedBy: 'DuckBot',
   });
   queue.approve(rec.id, { by: 'player' });
   const healthy = deriveSafetyState({ health: 20, food: 20 });

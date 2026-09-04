@@ -30,7 +30,7 @@ removed without breaking the bot. The bot can run without the bridge.
 ## Component boundaries
 
 - **Server**: pure Minecraft, no AI hooks. Drop a `server.jar` and start it.
-- **HermesCraft bot server**: thin Mineflayer wrapper. Hard-coded user is `HermesBot`. To make your own bot bodies, copy this and change `--username`.
+- **HermesCraft bot server**: thin Mineflayer wrapper. Hard-coded user is `DuckBot`. To make your own bot bodies, copy this and change `--username`.
 - **Bridge**: stateless. Restart it any time. Reads `mc`, calls model, writes `mc`. Default model is `ornith-1.5-9b`.
 - **Controller**: one reasoning loop per configured minion. Each minion has its own LM Studio model and tick interval. Independent from the bridge.
 - **Intelligence layer** (`minecraft/intelligence/`, no ports): typed capability/skill contracts, structured proposal parsing, deterministic policy, and the authority gateway. The controller exposes it read-only at `/intelligence`; Mission Control proxies it at `/api/intelligence`. Observe-only: proposals are validated and audited, never dispatched.
@@ -82,7 +82,7 @@ translator in front of the Java server.
 #    <this-machine>:19132, port 19132, leave the rest default.
 #
 # 5. The Bedrock player shows up as <name> in the Java world and as
-#    a Bedrock-prefixed UUID on the Java side. HermesBot will see them
+#    a Bedrock-prefixed UUID on the Java side. DuckBot will see them
 #    in chat and can address them by name.
 ```
 

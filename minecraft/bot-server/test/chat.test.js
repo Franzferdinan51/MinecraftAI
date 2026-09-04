@@ -11,15 +11,15 @@ import {
 } from '../lib/chat.js';
 
 test('known names include current cast and nearby names', () => {
-  const known = buildKnownNames('HermesBot', ['Alex', 'Elena']);
+  const known = buildKnownNames('DuckBot', ['Alex', 'Elena']);
   assert.ok(known.includes('elena'));
   assert.ok(known.includes('marcus'));
   assert.ok(known.includes('alex'));
-  assert.ok(known.includes('hermesbot'));
+  assert.ok(known.includes('duckbot'));
 });
 
 test('parseMessageRouting handles direct and group messages', () => {
-  const known = buildKnownNames('HermesBot', ['Alex']);
+  const known = buildKnownNames('DuckBot', ['Alex']);
   assert.deepEqual(parseMessageRouting('Elena: come here', { knownNames: known }), {
     targets: ['elena'],
     body: 'come here',
@@ -36,7 +36,7 @@ test('parseMessageRouting handles direct and group messages', () => {
 });
 
 test('parseMessageRouting falls back to public when prefix is not a valid name', () => {
-  const known = buildKnownNames('HermesBot');
+  const known = buildKnownNames('DuckBot');
   const routed = parseMessageRouting('Hello: world', { knownNames: known });
   assert.equal(routed.isBroadcast, true);
   assert.equal(routed.channel, 'public');
@@ -49,7 +49,8 @@ test('parseMessageRouting falls back to public when prefix is not a valid name',
 });
 
 test('mention parsing strips prefix cleanly', () => {
-  assert.equal(broadcastMentionsMe('Hermes, build a house', 'HermesBot'), 'hermes');
+  assert.equal(broadcastMentionsMe('DuckBot, build a house', 'DuckBot'), 'duckbot');
+  assert.equal(broadcastMentionsMe('Hermes, build a house', 'DuckBot'), 'hermes');
   assert.equal(stripMentionPrefix('Hermes, build a house', 'hermes'), 'build a house');
 });
 
