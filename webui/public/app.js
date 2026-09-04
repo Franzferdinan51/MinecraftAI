@@ -347,7 +347,7 @@ async function loadDashExtras() {
     const [s, inv, models] = await Promise.all([api('/api/server'), api('/api/inventories'), api('/api/models')]);
     if (view !== 'dash') return;
     serverSnap = s.ok ? s : { error: s.error };
-    renderDashServer(); renderDashInv(inv.ok ? inv.inventories : null); renderDashBrain(); renderDashModels(models); renderDashGive(); renderDashSettings(); renderDashActivity();
+    renderDashServer(); renderDashInv(inv.ok ? inv.inventories : null); renderDashBrain(); renderDashModels(models); renderDashGive(); renderDashSettings(); renderDashActivity(); renderDashIntel();
   } catch { /* retry next tick */ }
 }
 function renderDashServer() {
@@ -440,6 +440,31 @@ function renderDashActivity() {
       return `<div class="activity-row"><span class="activity-icon">${icon}</span><div><b>${esc(e.title)}</b><span class="role"> · ${esc(e.kind)} · ${fmtTime(e.time)}</span><div>${esc(e.detail)}</div></div></div>`;
     }).join('') : '<p class="hint">No recent events.</p>';
   }).catch(() => { box.innerHTML = '<p class="hint">feed offline</p>'; });
+}
+
+// ── dashboard: intelligence ledger (read-only; cannot dispatch) ──
+function renderDashIntel() {
+  const box = $('#dash-intel');
+  if (!box) return;
+  api('/api/intelligence').then((r) => {
+    if (!r.ok && !Array.isArray(r.records)) { box.innerHTML = `<p class="hint">ledger offline: ${esc(r.error || '…')}</p>`; return; }
+    const records = (r.records || []).slice(-10).reverse();
+    const head = `<div class="form-row"><span class="chip">mode: ${esc(r.mode || '?')}</span>`
+      + `<span class="chip">dispatch: ${r.dispatchEnabled ? 'ON' : 'off'}</span>`
+      + `<span class="role">${(r.records || []).length} records</span></div>`;
+    if (!records.length) { box.innerHTML = head + '<p class="hint">No proposals yet. The ledger fills as bots submit structured proposals.</p>'; return; }
+    box.innerHTML = head + records.map((rec) => {
+      const ds = (rec.decisions || []).map((d) =>
+        `<div>${d.accepted ? '✅' : '⛔'} <b>${esc(d.bot || '?')}</b>`
+        + ` <span class="role">${esc(d.capability || '')}${d.skill ? ' · ' + esc(d.skill) : ''} · tier ${d.riskTier ?? '?'} · ${esc(d.reason || '')}</span></div>`
+      ).join('');
+      return `<div class="activity-row"><span class="activity-icon">${rec.status === 'accepted' ? '🧠' : '⚠'}</span>`
+        + `<div><b>${esc(rec.source || '?')}</b><span class="role"> · ${esc(rec.status || '')} · ${rec.at ? fmtTime(rec.at) : ''}</span>`
+        + (rec.summary ? `<div>${esc(rec.summary)}</div>` : '')
+        + (rec.error ? `<div>${esc(rec.error)}</div>` : '')
+        + `${ds}</div></div>`;
+    }).join('');
+  }).catch(() => { box.innerHTML = '<p class="hint">ledger offline</p>'; });
 }
 
 // ── dashboard: queue maintenance ──

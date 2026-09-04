@@ -19,3 +19,22 @@ test('Mission Control intelligence route cannot queue bot commands', () => {
   assert.doesNotMatch(section, /\/queue/);
   assert.doesNotMatch(section, /\/say/);
 });
+
+const appSource = fs.readFileSync(new URL('../webui/public/app.js', import.meta.url), 'utf8');
+
+test('dashboard renders the observe-only intelligence ledger', () => {
+  assert.match(appSource, /dash-intel/);
+  assert.match(appSource, /\/api\/intelligence/);
+  assert.match(appSource, /function renderDashIntel/);
+});
+
+test('dashboard ledger never submits proposals or queues actions', () => {
+  const start = appSource.indexOf('function renderDashIntel');
+  assert.notEqual(start, -1);
+  const end = appSource.indexOf('// ── dashboard: queue maintenance ──', start);
+  assert.notEqual(end, -1);
+  const section = appSource.slice(start, end);
+  assert.doesNotMatch(section, /intelligence\/proposal/);
+  assert.doesNotMatch(section, /\/api\/queue/);
+  assert.doesNotMatch(section, /POST/);
+});
