@@ -23,8 +23,9 @@ license). Verified against our stack before adoption.
   `duckbot.md` overseer), `SOUL-landfolk.md` (shared contract,
   machine-enforced twin: `minecraft/intelligence/contracts.mjs`),
   `skills/minecraft-*.md` (all five guides). Upstream-only parts
-  deliberately not taken: experimental arena/battle, civilization
-  cast, LAN batch launchers.
+  deliberately not taken: experimental arena/battle and LAN batch
+  launchers. The Civilization cast is included under
+  `modes/civilization/`.
 - What we took: the architecture verbatim (our `minecraft/start-*.sh`
   launchers assume a hermescraft checkout at `$HOME/games/hermescraft`);
   the Landfolk rules synthesized into all six fleet SOUL.md contracts;

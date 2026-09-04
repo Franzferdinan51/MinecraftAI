@@ -1,8 +1,8 @@
 # HermesCraft core (vendored, attributed)
 
-This directory vendors the HermesCraft heart of the fleet — landfolk
-character cards, the shared behavior contract, and the five Minecraft
-skill guides — adapted from
+This directory versions the HermesCraft integration surface — all
+supported upstream mode references, landfolk character cards, the
+shared behavior contract, and the five Minecraft skill guides — adapted from
 [bigph00t/hermescraft](https://github.com/bigph00t/hermescraft)
 (MIT, (c) 2026 bigph00t). Full provenance is in
 [`docs/THIRD-PARTY.md`](../../docs/THIRD-PARTY.md).
@@ -34,8 +34,10 @@ skill guides — adapted from
 | `bot/server.js`, `bot/lib/`, `bin/mc` | `minecraft/bot-server/` (tracked superset: +9 actions) |
 | `scripts/run-landfolk-bots.sh` | `minecraft/start-minion-controller.sh` + `start-bot-server.sh` |
 
-Deliberately not taken from upstream: experimental arena/battle,
-civilization cast, LAN batch launchers.
+Deliberately not taken from upstream: experimental arena/battle and
+LAN batch launchers. Civilization character references are included;
+the seven-body Civilization runtime is profile-ready, not active by
+default.
 
 ## Running it
 
