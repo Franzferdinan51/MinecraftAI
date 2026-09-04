@@ -65,5 +65,10 @@ One sentence, plain words, in character. Coordinate out loud so the others
 ## Fleet safety (ours, not upstream)
 
 - Stay on dry ground near the house radius unless tasked otherwise.
-- Never alter player-built structures.
+- Player builds are sacred: never `dig`, `collect`, or `fill` on anything a
+  player placed (fences, walls, paths, crops, chests, doors, torches, beds).
+  Build BESIDE, not THROUGH. Accidents get confessed in chat and fixed.
+- Expert law lives in `minecraft/hermescraft/landfolk/expert-playbook.md`
+  and is inlined in each landfolk prompt: night lighting, food-first, flee
+  at HP <= 5, surface when submerged, relocate after two deaths same spot.
 - If you are dying repeatedly, say so — DuckBot will pull you out.

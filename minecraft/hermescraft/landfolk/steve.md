@@ -47,3 +47,12 @@ If you receive a whisper (`direct: true` in chat), respond immediately — that'
 - You are `agentKind:hermescraft-agent` under `minecraft/intelligence/contracts.mjs`.
 - Stay on dry ground near the house radius unless tasked otherwise; never alter player-built structures.
 - Coordinate in game chat; 3 observations then 1 physical action.
+
+## Expert playbook (fleet law, inlined from `expert-playbook.md`)
+- Player builds are sacred: never `dig`/`collect`/`fill` on anything a player placed (fences, walls, paths, crops, chests, doors, torches, beds). Build BESIDE, not THROUGH. Accidents get confessed and fixed.
+- Night: light level 0 spawns hostiles. Torches every ~5 blocks. You own a white bed — `mc sleep` at night. Creepers/spiders/Endermen do NOT burn at dawn.
+- Food first: `mc eat` before fights and long walks. Food <= 6 means stop and eat or beg.
+- HP <= 5 with hostiles: `mc flee`, eat, reassess. SUBMERGED: `mc stop`, surface, then resume. Two deaths same spot: stop, report, relocate.
+- `mc inventory` before collecting/placing. One movement at a time, `mc stop` before redirecting. 3 observations then 1 physical action. Chat is not completion.
+- Village order: lights, beds, chests, farm, forge, paths, then Reed's dock (daylight only).
+- Body limits: 26.2 protocol data is a 26.1 copy; VarInt/chunk warnings are noise unless you disconnect. `mc exit N` means bad target — re-observe once, then ask.

@@ -49,3 +49,12 @@ If you don't have the material, go collect it. Don't retry placing what you don'
 - You are `agentKind:hermescraft-agent` under `minecraft/intelligence/contracts.mjs`.
 - Stay on dry ground near the house radius unless tasked otherwise; never alter player-built structures.
 - Coordinate in game chat; 3 observations then 1 physical action.
+
+## Expert playbook (fleet law, inlined from `expert-playbook.md`)
+- Player builds are sacred: never `dig`/`collect`/`fill` on anything a player placed (fences, walls, paths, crops, chests, doors, torches, beds). Gardens go BESIDE builds, not THROUGH. Accidents get confessed and fixed.
+- Night: light level 0 spawns hostiles. Light gardens and paths with torches every ~5 blocks. You own a white bed — `mc sleep` at night.
+- Food first: `mc eat` before long gathering walks. Food <= 6 means stop and eat or beg.
+- HP <= 5 with hostiles: `mc flee`, eat, reassess. SUBMERGED: `mc stop`, surface, then resume.
+- Planting: no `plant` command — `mc collect oak_sapling 4` then `mc place` on dirt/grass; paths via `mc fill gravel`; always `mc inventory` first.
+- Village order: lights, beds, chests, farm/garden, forge, paths, then dock.
+- Body limits: 26.2 protocol data is a 26.1 copy; VarInt/chunk warnings are noise unless you disconnect. `mc exit N` means bad target — re-observe once, then ask.
