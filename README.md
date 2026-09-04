@@ -91,8 +91,8 @@ bridge/controller env. See [`docs/LM-STUDIO.md`](./docs/LM-STUDIO.md).
 ```text
 LM Studio (local)
    ↓ chat completion
-bridge.mjs
-   ↓ parses THINK:/ACT:
+bridge.mjs / Minion Controller
+   ↓ validated bot actions
 mc CLI
    ↓ HTTP
 hermescraft bot server (Mineflayer)
@@ -100,10 +100,52 @@ hermescraft bot server (Mineflayer)
 the world
 ```
 
-The bridge is a tiny HTTP relay. It calls your model every 6 seconds
-with the bot's status and recent chat, parses one decision back, and
-issues one `mc` command. The model is the brain, the bridge is the
-spinal cord, the `mc` server is the body.
+The bridge is a tiny HTTP relay. It calls your model with the bot's
+status and recent chat, parses one decision back, and issues one `mc`
+command. The model is the brain, the bridge is the spinal cord, the
+`mc` server is the body.
+
+Mission Control (`webui/`) aggregates the six bot APIs, controller,
+LM Studio bridge, team radio, inventories, queues, terrain, and
+allowlisted server operations into one responsive local command
+station. It is designed for both desktop and mobile browsers.
+
+## HermesCraft intelligence roadmap
+
+MinecraftAI is evolving from independent model loops into a supervised
+HermesCraft team. The implementation plan is
+[`HermesCraft Overseer and Minion Powers`](./.hermes/plans/2026-09-03_205152-hermescraft-overseer-and-minion-powers.md).
+
+The roadmap gives each character explicit, bounded powers:
+
+- **HermesBot:** overseer planning, incident review, research requests,
+  work-board design, shared-memory synthesis, and skill recommendations.
+- **Steve:** construction foreman and material preflight.
+- **Reed:** approved bounded build cards and completion verification.
+- **Moss:** food, farming, depot, and logistics procedures.
+- **Flint:** safe quarry batches, resource reports, and depot returns.
+- **Ember:** dry-route surveys, hazard reporting, and health-bounded defense.
+
+A power is a named, testable Minecraft capability—not unrestricted
+computer access. Models may propose work, but deterministic code will
+validate role permissions, protected areas, dry-ground safety, task
+leases, resource budgets, idempotency, and post-action evidence before
+an action is queued. New build footprints, water-enabled work, new
+skills, model-profile changes, and protected-boundary work require an
+explicit Mission Control approval.
+
+The planned rollout is `observe` → `shadow` → one-bot `canary` →
+`active`. Learning is limited to redacted, inspectable outcomes from
+verified work receipts; a learned procedure must be approved before it
+becomes a shared reusable skill. Bots will not receive raw shell,
+filesystem, browser, credentials, arbitrary RCON, or unrestricted MCP
+access.
+
+> **Current status:** This capability gateway, shared skillbook, and
+> learning system are planned—not yet enabled in live gameplay. The
+> existing Minecraft 26.2 protocol fork also has known particle and
+> entity-metadata decode warnings. Do not replace it with an upstream
+> dependency update without fixture tests and a one-bot canary.
 
 ## What's in the repo
 
