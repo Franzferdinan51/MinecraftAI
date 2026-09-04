@@ -268,7 +268,7 @@ async function loadHermesCraft() {
     if (!r.ok) throw new Error(r.error || 'catalog offline');
     cards.innerHTML = (r.modes || []).map((m) => `<article class="mode-card ${esc(m.status)}">
       <div class="mode-card-head"><span class="mode-icon">${m.id === 'landfolk' ? '🌿' : m.id === 'companion' ? '🧑‍🌾' : m.id === 'civilization' ? '🏘️' : m.id === 'minecraft' ? '⛏️' : '🎮'}</span><div><h3>${esc(m.name)}</h3><span class="mode-status">${esc(m.status)}</span></div></div>
-      <p>${esc(m.description)}</p><code>${esc(m.upstream_entry)}</code>
+      <p>${esc(m.description)}</p><code>${esc(m.upstream_entry)}</code>${r.mode_details?.[m.id] ? `<div class="mode-deploy-note">${r.mode_details[m.id].deployment_summary.agent_count} configured agent${r.mode_details[m.id].deployment_summary.agent_count === 1 ? '' : 's'} · ${esc(r.mode_details[m.id].deployment_summary.activation)}</div>` : ''}
     </article>`).join('');
     $('#mode-capabilities').innerHTML = (r.capabilities || []).map((x) => `<span class="capability">✓ ${esc(x)}</span>`).join('');
     $('#mode-commands').innerHTML = Object.entries(r.command_surface || {}).map(([group, commands]) => `<div class="command-group"><b>${esc(group.replace(/_/g, ' '))}</b><div>${commands.map((x) => `<code>${esc(x)}</code>`).join('')}</div></div>`).join('');

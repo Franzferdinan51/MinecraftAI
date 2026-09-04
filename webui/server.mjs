@@ -132,7 +132,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── HermesCraft modes/capabilities: static, safe, no runtime secrets ──
   if (req.method === 'GET' && url.pathname === '/api/hermescraft') {
-    return json(res, 200, { ok: true, ...HERMESCRAFT_MANIFEST, readiness: await hermesCraftReadiness() });
+    return json(res, 200, { ok: true, ...HERMESCRAFT_MANIFEST, mode_details: Object.fromEntries((HERMESCRAFT_MANIFEST.modes || []).map((m) => [m.id, hermesCraftModeDetail(m.id)])), readiness: await hermesCraftReadiness() });
   }
   const modeDetailMatch = url.pathname.match(/^\/api\/hermescraft\/mode\/([a-z-]+)$/);
   if (req.method === 'GET' && modeDetailMatch) {

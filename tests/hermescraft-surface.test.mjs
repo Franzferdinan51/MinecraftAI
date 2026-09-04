@@ -91,3 +91,11 @@ test('hermescraft mode detail: WebUI exposes safe per-mode deployment summaries'
   assert.match(server, /deployment_summary/);
   assert.match(server, /hermescraft.*mode/);
 });
+
+test('hermescraft catalog: mode cards include deployment summaries', () => {
+  const server = read(join(root, 'webui/server.mjs'));
+  assert.match(server, /mode_details/);
+  const app = read(join(root, 'webui/public/app.js'));
+  assert.match(app, /deployment_summary/);
+  assert.match(app, /agent_count/);
+});
