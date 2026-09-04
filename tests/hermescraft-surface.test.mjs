@@ -75,3 +75,12 @@ test('hermescraft core: all upstream modes are cataloged and Mission Control exp
   assert.match(read(join(root, 'webui/public/app.js')), /loadHermesCraft/);
   assert.match(read(join(root, 'webui/public/styles.css')), /mode-card/);
 });
+
+test('hermescraft readiness: Mission Control reports each mode operational state', () => {
+  const server = read(join(root, 'webui/server.mjs'));
+  assert.match(server, /modeReadiness/);
+  assert.match(server, /operational_modes/);
+  const app = read(join(root, 'webui/public/app.js'));
+  assert.match(app, /operational_modes/);
+  assert.match(app, /profile-ready/);
+});

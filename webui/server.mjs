@@ -67,6 +67,16 @@ function readBody(req) {
   });
 }
 
+function modeReadiness() {
+  const modes = HERMESCRAFT_MANIFEST.modes || [];
+  return modes.map((mode) => {
+    const configPresent = mode.config ? fs.existsSync(path.join(HERMESCRAFT_ROOT, mode.config)) : true;
+    const active = mode.id === 'landfolk' && mode.status === 'active';
+    const state = active ? 'active' : mode.status === 'profile-ready' ? 'profile-ready' : configPresent ? 'configured' : 'documented';
+    return { id: mode.id, status: state, config_present: configPresent, launch_policy: active ? 'managed-by-existing-fleet' : 'manual-review-required' };
+  });
+}
+
 async function hermesCraftReadiness() {
   const botChecks = await Promise.all(BOTS.map(async (b) => {
     const r = await botFetch(b.port, '/health');
@@ -80,7 +90,7 @@ async function hermesCraftReadiness() {
     duckbot_body: botChecks.find((b) => b.name === 'DuckBot')?.online === true,
     upstream_body_driver: fs.existsSync(path.join(upstreamBotDir, 'server.js')),
   };
-  return { active_mode: 'landfolk', checks, bots: botChecks };
+  return { active_mode: 'landfolk', checks, bots: botChecks, operational_modes: modeReadiness() };
 }
 
 const server = http.createServer(async (req, res) => {
