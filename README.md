@@ -4,6 +4,11 @@ Make any local LLM play Minecraft 1.21.11+ with you, and populate a
 vanilla world with several AI characters. Built on [Mineflayer],
 [hermescraft], and an [LM Studio] back-end.
 
+**DuckBot** leads the fleet: six HermesCraft landfolk agents
+(DuckBot + Steve, Reed, Moss, Flint, Ember) sharing one switchable
+local brain (`ornith-1.5-9b`), coordinated in game chat, verified
+live at 20/20.
+
 This repository does not include any live server state, secrets,
 real credentials, or private notes.
 
@@ -18,12 +23,13 @@ When you have everything running, the server is on:
 | Edition         | **Java Edition** only (not Bedrock)       |
 | Minecraft ver.  | 1.21.x (tested on 26.2, protocol 776)     |
 | Address         | `<your-machine>:25565` (LAN/local)         |
-| Username        | `DuckBot` (the AI's in-world identity)   |
+| Username        | `DuckBot` (leader; minions: `Steve`, `Reed`, `Moss`, `Flint`, `Ember`) |
 | Auth mode       | `online-mode=false` (offline / LAN friendly) |
-| Bot bridge      | `http://127.0.0.1:3001/` (`mc` CLI talks here) |
+| Bot bodies      | DuckBot `:3001`, Steve `:3011`, Reed `:3012`, Moss `:3013`, Flint `:3014`, Ember `:3015` |
 | LM Studio bridge| `http://127.0.0.1:3002/` (inspector)      |
 | Minion Ctrl     | `http://127.0.0.1:3003/` (inspector)      |
-| Default model   | `ornith-1.5-9b` (any LM Studio / Ollama / vLLM works) |
+| Mission Control | `http://127.0.0.1:3100/` (desktop + mobile) |
+| Default model   | `ornith-1.5-9b` (switchable via `scripts/fleet-model.sh`) |
 
 ### Connecting from a phone
 
@@ -110,11 +116,17 @@ LM Studio bridge, team radio, inventories, queues, terrain, and
 allowlisted server operations into one responsive local command
 station. It is designed for both desktop and mobile browsers.
 
-## HermesCraft intelligence roadmap
+## HermesCraft fleet (live)
 
-MinecraftAI is evolving from independent model loops into a supervised
-HermesCraft team. The implementation plan is
-[`HermesCraft Overseer and Minion Powers`](./.hermes/plans/2026-09-03_205152-hermescraft-overseer-and-minion-powers.md).
+MinecraftAI runs a supervised HermesCraft team, not independent model
+loops. All six agents are Hermes agents on the switchable
+`ornith-1.5-9b` brain (see `scripts/fleet-model.sh`), each with its
+own isolated profile, body, and role skills — DuckBot (overseer),
+Steve (foreman), Reed (builder), Moss (farmer), Flint (miner), Ember
+(guardian). Full upstream hermescraft behavior is adopted and
+synthesized (see `docs/THIRD-PARTY.md`): landfolk character craft,
+role skillbooks, inventory-first play, SUBMERGED recovery, one-line
+chat with whisper coordination, and a 3-observations-to-1-action loop.
 
 The roadmap gives each character explicit, bounded powers:
 
@@ -141,20 +153,29 @@ becomes a shared reusable skill. Bots will not receive raw shell,
 filesystem, browser, credentials, arbitrary RCON, or unrestricted MCP
 access.
 
-> **Current status:** This capability gateway, shared skillbook, and
-> learning system are planned—not yet enabled in live gameplay. The
-> existing Minecraft 26.2 protocol fork also has known particle and
-> entity-metadata decode warnings. Do not replace it with an upstream
-> dependency update without fixture tests and a one-bot canary.
+> **Current status (2026-09-04):** live and verified — DuckBot body
+> `:3001` plus five minion bodies `:3011`–`:3015` all connected at
+> 20/20, controller + bridge healthy with zero LM errors, 120/120
+> tests green (`tests/` + `minecraft/bot-server/test/`), secret scan
+> clean. Known benign warnings: the 26.2 protocol fork still logs
+> particle / entity-metadata decode shorts (`sonic_boom`,
+> `world_particles`) — fixture-pinned, no fleet restarts. Do not
+> replace it with an upstream dependency update without fixture tests
+> and a one-bot canary.
 
 ## What's in the repo
 
 - [`README.md`](./README.md) — this file
 - [`AGENTS.md`](./AGENTS.md) — for AI agents working on this repo
 - [`LICENSE`](./LICENSE) — MIT
-- `docs/` — architecture, running, LM Studio config, troubleshooting
+- `docs/` — architecture, running, LM Studio config, troubleshooting, `THIRD-PARTY.md` (hermescraft MIT attribution)
 - `lmstudio-bridge/` — the single-bot LM Studio bridge
-- `minecraft/` — convenience scripts and the minion controller
+- `minecraft/` — bot server, minion controller, intelligence (contracts, shadow audit, journal), protocol fixtures
+- `hermes-overseer/` — overseer request builder, fleet roster (`AGENTS.md`)
+- `webui/` — Mission Control (desktop + mobile)
+- `tests/` + `minecraft/bot-server/test/` — 120 green (run: `node --test tests/*.test.mjs minecraft/bot-server/test/*.test.js`)
+- `.github/workflows/ci.yml` — CI: tests, syntax, secret scan
+- `scripts/` — `fleet-model.sh` (switchable brain), `secret-scan.sh` (run before every commit)
 - `mineflayer-26.2-fork/` — patches, data overlay, installer for 26.2
 
 ## Files outside the repo you also need
