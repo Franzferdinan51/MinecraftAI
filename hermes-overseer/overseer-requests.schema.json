@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minecraftai.local/schemas/overseer-request-1.json",
+  "title": "HermesCraft overseer request (v1)",
+  "description": "Bounded, redacted package the game stack may send to the Hermes overseer profile. Never includes credentials, server config, raw chat, or files.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["goal", "goalVersion", "manifest", "budget"],
+  "properties": {
+    "goal": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "goalVersion": { "type": "integer", "minimum": 1 },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": { "type": "array", "maxItems": 40, "items": { "type": "string", "maxLength": 80 } },
+        "roles": { "type": "array", "maxItems": 12, "items": { "type": "string", "maxLength": 40 } }
+      }
+    },
+    "memories": {
+      "type": "array", "maxItems": 20,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "summary"],
+        "properties": {
+          "id": { "type": "string", "maxLength": 80 },
+          "summary": { "type": "string", "maxLength": 300 }
+        }
+      }
+    },
+    "receipts": {
+      "type": "array", "maxItems": 20,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["idempotencyKey", "bot"],
+        "properties": {
+          "idempotencyKey": { "type": "string", "maxLength": 120 },
+          "bot": { "type": "string", "maxLength": 32 },
+          "result": { "type": "string", "maxLength": 120 }
+        }
+      }
+    },
+    "safetySummary": { "type": "string", "maxLength": 500 },
+    "taskBoard": { "type": "object", "maxProperties": 10 },
+    "question": { "type": "string", "maxLength": 500 },
+    "budget": {
+      "type": "object", "additionalProperties": false,
+      "required": ["maxTokens", "timeoutMs"],
+      "properties": {
+        "maxTokens": { "type": "integer", "minimum": 1, "maximum": 8000 },
+        "timeoutMs": { "type": "integer", "minimum": 1000, "maximum": 120000 }
+      }
+    }
+  }
+}
