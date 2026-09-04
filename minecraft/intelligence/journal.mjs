@@ -41,5 +41,18 @@ export function createIntelligenceJournal({ limit = 100, now = Date.now } = {}) 
     list() {
       return Object.freeze([...records]);
     },
+    recordShadow({ source, action, verdict, reasons = [], recoveryAction = null }) {
+      const at = now();
+      return retain({
+        at,
+        source: String(source || 'unknown').slice(0, 40),
+        status: 'shadow',
+        summary: `shadow ${String(verdict || 'unknown').slice(0, 24)}: ${String(action || '').slice(0, 120)}`,
+        verdict: String(verdict || 'unknown').slice(0, 24),
+        reasons: Object.freeze((Array.isArray(reasons) ? reasons : []).map((r) => String(r).slice(0, 40))),
+        recoveryAction: recoveryAction == null ? null : String(recoveryAction).slice(0, 24),
+        decisions: Object.freeze([]),
+      });
+    },
   });
 }

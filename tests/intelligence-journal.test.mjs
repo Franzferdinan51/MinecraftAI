@@ -38,3 +38,15 @@ test('journal bounds retained records', () => {
   assert.equal(journal.list().length, 2);
   assert.equal(journal.list()[0].at, 2);
 });
+
+test('journal records shadow audits without gating anything', () => {
+  const journal = createIntelligenceJournal({ now: () => 999 });
+  const record = journal.recordShadow({
+    source: 'Moss', action: 'goto_near 44 63 85', verdict: 'would_allow', reasons: [],
+  });
+  assert.equal(record.status, 'shadow');
+  assert.equal(record.verdict, 'would_allow');
+  assert.match(record.summary, /shadow would_allow/);
+  assert.deepEqual(record.decisions, []);
+  assert.equal(journal.list().length, 1);
+});

@@ -13,7 +13,7 @@ touches the network, the filesystem, or a bot queue.
 | `contracts.mjs` | `ACTORS` (all six bots share the `hermescraft-agent` identity with one bounded role each) plus strict proposal validation. Tier 3 requires `requiresApproval: true`. |
 | `model-protocol.mjs` | Parses bounded JSON proposal envelopes (schema v1, max 6 proposals). Malformed input yields no partial action; raw `mc` strings are rejected. |
 | `policy.mjs` | `evaluateProposal()`: observe/shadow/canary/active modes, protected house radius, water-enabled approval rule. Tier 3 never dispatches, even when approved. |
-| `journal.mjs` | Bounded in-memory audit log of sanitized decisions. Stores receipts and summaries only — never prompts, chain-of-thought, or chat. |
+| `journal.mjs` | Bounded in-memory audit log of sanitized decisions. Stores receipts and summaries only — never prompts, chain-of-thought, or chat. `recordShadow()` retains observe-only shadow verdicts alongside proposal records. |
 | `authority-gateway.mjs` | `authorize()`: schema → role/capability → bot safety state → policy → lease → budget → idempotency → adapter. `verifyReceipt()` returns `verified` or `needs_review`, never a fabricated completion. |
 | `action-adapters.mjs` | Builds bounded skill-card action *descriptors* (plain data). No HTTP/RCON/shell/queue calls. Raw dig/place/admin have no adapter. |
 | `memory-store.mjs` | Three-scope team memory: expiring episodic, corroborated semantic, review-gated procedural. Only verified receipts and trusted observations are stored. |
@@ -21,6 +21,7 @@ touches the network, the filesystem, or a bot queue.
 | `role-skillbook.mjs` | Per-bot active cards from the role registry; learned cards stay under `pendingReview` until approved. |
 | `safety-state.mjs` | `deriveSafetyState()`: deterministic hold/recovery derivation from vitals (health, food, death streak, water, hostiles, stuck, connection, pause). Recovery outranks model plans; missing vitals fail closed. Feeds the gateway's `botState` flags. |
 | `approvals-queue.mjs` | `createQueue()`: Tier 3 player-approval lifecycle (pending → approved/rejected/expired, single-use consume). Approved records match the exact shape `policy.mjs` checks. The deterministic producer for policy's approvals arrays. |
+| `shadow-audit.mjs` | `auditAction()`: pure shadow verdicts over live `mc` traffic (would_allow / would_hold / would_deny). Only world-altering verbs are checked against the protected radius; movement and chat never trigger it. Called from the controller's action choke point in try/catch — observe-only, never gates. |
 
 ## Status
 

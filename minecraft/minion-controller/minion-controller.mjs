@@ -30,6 +30,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createIntelligenceJournal } from '../intelligence/journal.mjs';
+import { auditAction } from '../intelligence/shadow-audit.mjs';
 
 const args = process.argv.slice(2);
 let cfgPath = null;
@@ -60,6 +61,7 @@ const INTELLIGENCE_MODE = ['observe', 'shadow', 'canary', 'active'].includes(con
   : 'observe';
 const INTELLIGENCE_CANARY = String(process.env.INTELLIGENCE_CANARY || '').slice(0, 20);
 const intelligenceJournal = createIntelligenceJournal();
+const shadowJournal = createIntelligenceJournal({ limit: 200 });
 // Parallel model calls allowed per user 2026-09-03: all minions think at once.
 // lmsQueueDepth is kept only for health visibility / queued fallback prefix.
 let lmsQueueDepth = 0;
@@ -267,7 +269,7 @@ async function lmsCompleteUnlocked(model, observation, name, role) {
 
 const state = new Map();
 for (const m of minions) {
-  state.set(m.name, { last_observation: '', last_action: 'NONE — initialized', pending: false, activity_pending: false, action_busy: false, ticks: 0, last_pos: '', stuck_count: 0 });
+  state.set(m.name, { name: m.name, last_observation: '', last_action: 'NONE — initialized', pending: false, activity_pending: false, action_busy: false, ticks: 0, last_pos: '', stuck_count: 0, safetyVitals: {} });
 }
 
 // Same rounded position across ticks while trying to move = stuck (cave/wall).
@@ -592,6 +594,20 @@ function recoveryAfterFailedAction(minion, statusJson, attemptedAction, errorMes
 async function runMinionAction(entry, args, apiUrl) {
   while (entry.action_busy) await new Promise((resolve) => setTimeout(resolve, 50));
   entry.action_busy = true;
+  // Shadow-mode audit: record what the deterministic pipeline WOULD have
+  // decided about this action. Observe-only — never gates or alters it.
+  // Any audit failure is swallowed so it cannot break a live tick.
+  try {
+    const audit = auditAction({
+      bot: entry.name, actionArgs: args,
+      vitals: entry.safetyVitals || {},
+      house: { ...HOUSE, radius: HOUSE_SAFE_RADIUS },
+    });
+    shadowJournal.recordShadow({
+      source: audit.bot, action: audit.action, verdict: audit.verdict,
+      reasons: [...audit.reasons], recoveryAction: audit.recoveryAction,
+    });
+  } catch {}
   try {
     const out = await callMc(args, apiUrl);
     // Navigation commands are launched as Mineflayer tasks and return before
@@ -619,6 +635,10 @@ async function tick(minion) {
   try {
     const apiUrl = minion.api_url || DEFAULT_MC_API;
     const status = await callMc(['status', '--json'], apiUrl);
+    try {
+      const sd = JSON.parse(status).data || {};
+      entry.safetyVitals = { health: sd.health, food: sd.food };
+    } catch { entry.safetyVitals = {}; }
     updateVillageCenter(minion, status);
     updatePlayerSightings(playerSightings, minion.name, status);
     if (stuckNudge(entry, status) === 'STUCK') {
@@ -878,7 +898,7 @@ const server = http.createServer((req, res) => {
       mode: INTELLIGENCE_MODE,
       canaryBot: INTELLIGENCE_CANARY || null,
       dispatchEnabled: false,
-      records: intelligenceJournal.list(),
+      records: [...intelligenceJournal.list(), ...shadowJournal.list()],
     });
   }
   if (req.method === 'POST' && req.url === '/intelligence/proposal') {
