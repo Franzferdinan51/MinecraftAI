@@ -309,7 +309,10 @@ function survivalAction(statusJson, lastAction = '') {
   const hostile = (d.nearbyEntities || []).find((e) => e.kind === 'hostile');
   const food = (d.inventory || []).some((i) => /bread|apple|carrot|potato|beef|pork|chicken|mutton|fish|stew/i.test(i.name) && i.count > 0);
   if (d.isInWater === true || /submerged|in water/i.test(String(d.hazard || ''))) {
-    return /mc stop\b/.test(lastAction || '') ? 'mc jump' : 'mc stop';
+    // `mc jump` is not a CLI action. Hold all movement instead of converting
+    // a water hazard into an unsupported-command loop; recovery remains
+    // explicitly observable and requires a supported dry-ground route.
+    return 'mc stop';
   }
   if (hostile && hostile.distance <= 10 && (d.health || 0) >= 10) return `mc fight ${hostile.type}`;
   if ((d.health || 0) < 10 && food) return 'mc eat';
