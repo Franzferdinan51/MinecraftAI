@@ -1,150 +1,432 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HermesCraft Mission Control</title>
-<link rel="stylesheet" href="/styles.css?v=8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Mission Control — HermesCraft Fleet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css?v=10">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2319191b'/%3E%3Cpath d='M9 8h14v3H9zM9 14h10v3H9zM9 20h14v3H9z' fill='%235e6ad2'/%3E%3C/svg%3E">
 </head>
 <body>
-<div id="app">
-  <!-- far-left guild rail -->
-  <nav id="rail">
-    <div class="guild active" title="HermesCraft">H</div>
-    <div class="rail-sep"></div>
-    <div id="dm-rail"></div>
-  </nav>
-  <!-- channels -->
-  <aside id="channels">
-    <header>HermesCraft</header>
-    <div class="chan-group">TEXT CHANNELS</div>
-    <div class="chan active" data-view="global"><span class="hash">#</span>global-chat</div>
-    <div class="chan" data-view="team"><span class="hash">📻</span>team-radio</div>
-    <div class="chan" data-view="map"><span class="hash">🗺</span>map</div>
-    <div class="chan-group">DIRECT MESSAGES</div>
-    <div id="dm-list"></div>
-    <div class="chan-group">VILLAGE</div>
-    <div class="chan" data-view="goal"><span class="hash">🎯</span>village-goal</div>
-    <div class="chan" data-view="ask"><span class="hash">🤖</span>ask-ai</div>
-    <div class="chan" data-view="modes"><span class="hash">🧭</span>HermesCraft modes</div>
-    <div class="chan" data-view="status"><span class="hash">#</span>bot-status</div>
-    <div class="chan" data-view="dash"><span class="hash">⚙</span>dashboard</div>
-    <div id="me"><div class="avatar" style="--c:#faa81a">D</div><div><b>Duckets</b><span>commander</span></div></div>
-  </aside>
-  <!-- main -->
-  <main id="main">
-    <header id="chan-head"><button id="mobile-nav-toggle" type="button" aria-label="Open navigation" aria-controls="channels" aria-expanded="false">☰</button><span class="hash">#</span><b id="chan-name">global-chat</b><span id="chan-topic">everything said in the world, live</span><label class="sr-only" for="chat-filter">Filter chat</label><input id="chat-filter" placeholder="filter…" aria-label="Filter chat"></header>
-    <div id="broadcast">
-      <button data-b="come" type="button">📣 Come here</button>
-      <button data-b="report" type="button">📝 Report in</button>
-      <button data-b="eat" type="button">🍖 Eat all</button>
-      <button data-b="sleep" type="button">🛏 Sleep all</button>
-      <button data-b="yard" type="button">🏠 Yard rally</button>
+<a href="#main" class="sr-only">Skip to content</a>
+
+<div class="app">
+
+  <!-- ── Top bar: brand + global status pills ─────────────────────── -->
+  <header class="top-bar">
+    <div class="top-left">
+      <button class="menu-btn" type="button" id="mobile-nav-toggle" aria-label="Open navigation">☰</button>
+      <a class="brand" href="/">
+        <span class="brand-mark"><span></span><span></span><span></span></span>
+        <span class="brand-name">Mission Control</span>
+        <span class="brand-tag">HermesCraft</span>
+      </a>
     </div>
-    <div id="messages"></div>
-    <div id="status-cards"></div>
-    <div id="map-pane"><div class="panel wide"><h2>🗺 Village map</h2><p class="hint">Live high-resolution terrain. Scroll to zoom, drag to pan, click a bot marker to inspect.</p><div class="map-tools"><button id="map-out" type="button" aria-label="Zoom out">−</button><button id="map-reset" type="button">⌖ reset</button><button id="map-in" type="button" aria-label="Zoom in">+</button><label><input id="map-follow" type="checkbox"> follow selected</label><span class="map-legend"><i style="background:#5865f2"></i>house <i style="background:#faa81a"></i>beds <i style="background:#57a25c"></i>bots</span></div><canvas id="map" width="900" height="900" tabindex="0" role="img" aria-label="Interactive terrain map with house, beds, and bot positions"></canvas><div id="map-readout" class="role" aria-live="polite">terrain ready</div></div></div>
-    <div id="goal-pane">
-      <div class="panel">
-        <h2>🎯 Village goal</h2>
-        <p class="hint">Every bot reads this as its MISSION each think. Change it and the whole village pivots within a minute.</p>
-        <div id="goal-current"></div>
-        <textarea id="goal-input" rows="3" placeholder="e.g. Build a wheat farm east of the house and store bread in the chest"></textarea>
-        <div id="goal-presets"></div>
-        <button id="goal-save">Set goal</button>
-      </div>
+    <nav class="top-pills" aria-label="Fleet status">
+      <span class="pill" id="pill-world" title="Minecraft world">
+        <span class="dot dot-soft" id="dot-world"></span>
+        <span id="pill-world-text">connecting…</span>
+      </span>
+      <span class="pill" id="pill-online" title="Online bots">
+        <span class="dot dot-soft" id="dot-online"></span>
+        <span id="pill-online-text">0/6</span>
+      </span>
+      <span class="pill" id="pill-phase" title="Time of day">
+        <span class="dot dot-soft" id="dot-phase"></span>
+        <span id="pill-phase-text">…</span>
+      </span>
+      <span class="pill" id="pill-model" title="Active model">
+        <span class="dot dot-soft" id="dot-model"></span>
+        <span id="pill-model-text">…</span>
+      </span>
+      <span class="pill pill-tab" data-go="goal" role="button" tabindex="0" title="Set village goal">
+        🎯 Goal
+      </span>
+      <span class="pill pill-tab" data-go="talk" role="button" tabindex="0" title="Open chat input">
+        💬 Talk
+      </span>
+      <span class="pill pill-tab" data-go="ask" role="button" tabindex="0" title="Ask the AI advisor">
+        ✨ Ask
+      </span>
+    </nav>
+    <div class="top-right">
+      <span class="ts" id="clock">—</span>
+      <button class="icon-btn" type="button" id="settings-btn" aria-label="Settings">⚙</button>
     </div>
-    <div id="modes-pane">
-      <div class="panel wide">
-        <div class="mode-title"><div><span class="eyebrow">UPSTREAM INTEGRATION</span><h2>🧭 HermesCraft modes</h2><p class="hint">The upstream modes are mapped into this fleet. Read-only catalog — launches remain deliberate and safety-gated.</p></div><a class="source-link" href="https://github.com/bigph00t/hermescraft" target="_blank" rel="noreferrer">↗ upstream</a></div>
-        <div id="mode-cards"><p class="hint">loading modes…</p></div>
+  </header>
+
+  <!-- ── Main three-column layout ──────────────────────────────────── -->
+  <div class="main">
+
+    <!-- Fleet rail: avatars + status ─────────────────────────────── -->
+    <aside class="rail-fleet" id="rail-fleet" aria-label="Fleet">
+      <div class="rail-head">FLEET</div>
+      <ul id="fleet-rail" class="fleet-list">
+        <li class="ph">loading fleet…</li>
+      </ul>
+      <div class="rail-head sep">QUICK</div>
+      <button class="quick" data-broadcast="come" type="button">📣 Come here</button>
+      <button class="quick" data-broadcast="report" type="button">📝 Report in</button>
+      <button class="quick" data-broadcast="eat" type="button">🍖 Eat all</button>
+      <button class="quick" data-broadcast="sleep" type="button">🛏 Sleep all</button>
+      <button class="quick" data-broadcast="yard" type="button">🏠 Yard rally</button>
+      <div class="rail-head sep">VILLAGE TIME</div>
+      <div class="time-bar-wrap" aria-label="Day/night bar">
+        <div class="time-bar">
+          <div class="time-bar-track"></div>
+          <div class="time-bar-sun" id="time-bar-sun"></div>
+          <div class="time-bar-marks">
+            <span style="left: 25%">06:00</span>
+            <span style="left: 50%">12:00</span>
+            <span style="left: 75%">18:00</span>
+          </div>
+        </div>
+        <div class="time-bar-label" id="time-bar-label">…</div>
       </div>
-      <div class="panel wide"><h2>✨ Shared capabilities</h2><div id="mode-capabilities" class="capability-grid"><p class="hint">loading…</p></div></div>
-      <div class="panel wide"><h2>🛠 HermesCraft command surface</h2><p class="hint">The safe, human-readable command vocabulary exposed by the integrated <code>mc</code> interface.</p><div id="mode-commands" class="command-groups"><p class="hint">loading…</p></div></div>
-      <div class="panel wide"><h2>✅ Runtime readiness</h2><p class="hint">Live preflight for the active fleet and the upstream HermesCraft body driver. This never launches or restarts anything.</p><div id="mode-readiness"><p class="hint">checking…</p></div></div>
-      <div class="panel wide"><h2>🧩 Fleet mapping</h2><div id="mode-fleet" class="fleet-map"><p class="hint">loading…</p></div></div>
-    </div>
-    <div id="dash-pane">
-      <div class="panel wide">
-        <h2>⚙ Fleet vitals</h2>
-        <p class="hint">Pause bots, set think pace, quick-queue survival tasks. <button id="pause-all" type="button">⏸ all</button> <button id="resume-all" type="button">▶ all</button> <label>pace all <select id="pace-all"><option value="">—</option><option value="30000">30s</option><option value="60000">60s</option><option value="90000">90s</option><option value="180000">3m</option></select></label></p>
-        <div id="dash-rows"></div>
-      </div>
-      <div class="panel wide">
-        <h2>🌍 Server world</h2>
-        <div id="dash-server"><p class="hint">loading…</p></div>
-      </div>
-      <div class="panel wide">
-        <h2>🎒 Fleet inventories</h2>
-        <div id="dash-inv"><p class="hint">loading…</p></div>
-      </div>
-      <div class="panel wide">
-        <h2>🎁 Give items</h2>
-        <p class="hint">Spawn items into anyone's pockets via the server (logged in chat).</p>
-        <div id="dash-give"></div>
-      </div>
-      <div class="panel wide">
-        <h2>🧠 Brain &amp; mission</h2>
-        <div id="dash-brain"><p class="hint">loading…</p></div>
-        <div id="dash-models"><p class="hint">loading LM Studio models…</p></div>
-      </div>
-      <div class="panel wide">
-        <h2>📡 Operations feed</h2>
-        <p class="hint">Recent chat, control actions, and death events in one auditable timeline.</p>
-        <div id="dash-activity"><p class="hint">loading…</p></div>
-      </div>
-      <div class="panel wide">
-        <h2>🧠 Intelligence ledger</h2>
-        <p class="hint">Observe-only proposals: what the bots suggested and what policy decided. Nothing here can dispatch actions.</p>
-        <div id="dash-intel"><p class="hint">loading…</p></div>
-      </div>
-      <div class="panel wide">
-        <h2>🛡 Fleet safety</h2>
-        <p class="hint">Live hold/recovery view per bot. Recovery outranks plans — red bots need food or regroup, not new tasks.</p>
-        <div id="dash-safety"><p class="hint">waiting for state…</p></div>
-      </div>
-      <div class="panel wide">
-        <h2>🧹 Queue maintenance</h2>
-        <p class="hint">Cancel waiting work across the fleet without killing the bots themselves.</p>
-        <button id="clear-all-queues" type="button">Clear all waiting queues</button>
-      </div>
-      <div class="panel wide">
-        <h2>🔧 Interface settings</h2>
-        <div id="dash-settings"></div>
-      </div>
-    </div>
-    <form id="composer"><input id="input" autocomplete="off" placeholder="Message #global-chat — bots hear you like in-game chat"><button type="submit">Send</button></form>
-  </main>
-  <nav id="mobile-viewbar" aria-label="Quick navigation">
-    <button type="button" data-mobile-view="global">💬<span>Chat</span></button><button type="button" data-mobile-view="team">📻<span>Team</span></button><button type="button" data-mobile-view="map">🗺<span>Map</span></button><button type="button" data-mobile-view="modes">🧭<span>Modes</span></button><button type="button" data-mobile-view="dash">⚙<span>Control</span></button><button type="button" data-mobile-view="goal">🎯<span>Goal</span></button>
-  </nav>
-  <!-- members -->
-  <aside id="members">
-    <div class="chan-group">BOTS — <span id="online-count">0</span></div>
-    <div id="member-list"></div>
-    <div class="chan-group">BOT CARE</div>
-    <div id="care">
-      <div id="care-name">select a bot</div>
-      <div id="care-btns">
-        <button data-op="eat">🍖 Eat</button>
-        <button data-op="sleep">🛏 Sleep</button>
-        <button data-op="yard">🏠 Yard</button>
-        <button data-op="stop">⏹ Stop</button>
-        <button data-op="inventory">🎒 Bags</button>
-      </div>
-      <div id="care-out"></div>
-      <div class="chan-group" style="padding-left:0">TASK QUEUE</div>
-      <div id="queue-list"></div>
-      <div id="queue-add">
+    </aside>
+
+    <!-- Center: tabs + content panes ─────────────────────────────── -->
+    <main class="content" id="main">
+
+      <!-- Tab strip -->
+      <nav class="tabs" role="tablist" aria-label="Views">
+        <button class="tab active" data-view="live" role="tab">🌍 Live</button>
+        <button class="tab" data-view="chat" role="tab">💬 Chat <kbd>1</kbd></button>
+        <button class="tab" data-view="map" role="tab">🗺 Map <kbd>2</kbd></button>
+        <button class="tab" data-view="intelligence" role="tab">🧠 Intel <kbd>3</kbd></button>
+        <button class="tab" data-view="vitals" role="tab">📈 Vitals <kbd>4</kbd></button>
+        <button class="tab" data-view="goal" role="tab">🎯 Goal <kbd>5</kbd></button>
+        <button class="tab" data-view="control" role="tab">⚙ Control <kbd>6</kbd></button>
+        <button class="tab" data-view="ask" role="tab">✨ Ask <kbd>7</kbd></button>
+        <button class="tab" data-view="modes" role="tab">🧭 Modes</button>
+      </nav>
+
+      <!-- Live dashboard: world + fleet cards + ops feed + leaderboard -->
+      <section class="pane" data-pane="live">
+        <div class="grid grid-live">
+
+          <!-- World card -->
+          <article class="card card-world" id="card-world">
+            <header><h2>🌍 World</h2><span class="muted" id="world-updated">—</span></header>
+            <div class="world-body">
+              <div class="phase-clock">
+                <div class="phase-bg"></div>
+                <div class="phase-arc" id="phase-arc"></div>
+                <div class="phase-time"><span id="phase-time">--:--</span></div>
+                <div class="phase-sub" id="phase-sub">loading…</div>
+              </div>
+              <dl class="kv">
+                <div><dt>Players</dt><dd id="w-players">—</dd></div>
+                <div><dt>Difficulty</dt><dd id="w-difficulty">—</dd></div>
+                <div><dt>Phase</dt><dd id="w-phase">—</dd></div>
+                <div><dt>Tick</dt><dd id="w-tick">—</dd></div>
+              </dl>
+            </div>
+          </article>
+
+          <!-- Fleet cards: 6 avatars with HP/food/pos/task -->
+          <article class="card card-fleet" id="card-fleet">
+            <header>
+              <h2>Fleet</h2>
+              <span class="muted" id="fleet-updated">—</span>
+            </header>
+            <div class="fleet-grid" id="fleet-grid"><div class="ph">loading…</div></div>
+          </article>
+
+          <!-- Activity feed -->
+          <article class="card card-activity" id="card-activity">
+            <header>
+              <h2>Activity feed</h2>
+              <span class="muted">control + chat + deaths</span>
+            </header>
+            <ol class="feed" id="feed"><li class="ph">loading…</li></ol>
+          </article>
+
+          <!-- Leaderboard -->
+          <article class="card card-leaders" id="card-leaders">
+            <header>
+              <h2>Today's leaderboard</h2>
+              <span class="muted" id="leaders-updated">—</span>
+            </header>
+            <ol class="leaders" id="leaders"><li class="ph">loading…</li></ol>
+          </article>
+
+          <!-- Quick actions -->
+          <article class="card card-quick">
+            <header><h2>Quick actions</h2></header>
+            <div class="quick-grid">
+              <button type="button" data-broadcast="come">📣 Come here</button>
+              <button type="button" data-broadcast="report">📝 Report in</button>
+              <button type="button" data-broadcast="eat">🍖 Eat all</button>
+              <button type="button" data-broadcast="sleep">🛏 Sleep all</button>
+              <button type="button" data-broadcast="yard">🏠 Yard rally</button>
+              <button type="button" data-go="ask">✨ Ask the advisor</button>
+              <button type="button" data-go="goal">🎯 Set goal</button>
+              <button type="button" data-go="control">⚙ Open control</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- Chat tab -->
+      <section class="pane hidden" data-pane="chat">
+        <div class="chat-wrap">
+          <div class="chat-toolbar">
+            <h2>💬 Live chat</h2>
+            <input id="chat-filter" placeholder="filter…" aria-label="Filter chat">
+            <label class="chk"><input type="checkbox" id="chat-overheard" checked> overheard</label>
+          </div>
+          <div id="messages" class="messages"></div>
+          <form id="composer" class="composer">
+            <input id="input" autocomplete="off" placeholder="Talk to the fleet — prefixed names route only to that bot (e.g. DuckBot: hi)">
+            <button type="submit">Send</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Map tab -->
+      <section class="pane hidden" data-pane="map">
+        <div class="map-pane">
+          <div class="map-tools">
+            <button id="map-out" type="button" aria-label="Zoom out">−</button>
+            <button id="map-reset" type="button">⌖ reset</button>
+            <button id="map-in" type="button" aria-label="Zoom in">+</button>
+            <label><input id="map-follow" type="checkbox" checked> follow leader</label>
+            <span class="legend"><i style="background:#5e6ad2"></i>DuckBot <i style="background:#57a25c"></i>Steve <i style="background:#c98a3b"></i>Reed <i style="background:#6abe30"></i>Moss <i style="background:#8e8e93"></i>Flint <i style="background:#e0643a"></i>Ember</span>
+          </div>
+          <canvas id="map" width="900" height="900" tabindex="0" role="img" aria-label="Top-down map of the village with bot positions"></canvas>
+          <div id="map-readout" class="role" aria-live="polite">terrain loading…</div>
+        </div>
+      </section>
+
+      <!-- Intelligence advisor tab -->
+      <section class="pane hidden" data-pane="intelligence">
+        <div class="intel-grid">
+          <article class="card">
+            <header><h2>🧠 Advisor</h2><span class="muted">ask in plain English</span></header>
+            <form id="ask-form">
+              <textarea id="ask-input" rows="3" placeholder="e.g. why is flint dying so much? what should I tell the fleet?"></textarea>
+              <button type="submit">Ask</button>
+            </form>
+            <div id="ask-out" class="ask-out"></div>
+            <div id="ask-did" class="ask-did"></div>
+          </article>
+          <article class="card">
+            <header><h2>📒 Intelligence ledger</h2><span class="muted">bots propose; you decide</span></header>
+            <ol id="intel-list" class="intel-list"><li class="ph">loading…</li></ol>
+            <details>
+              <summary>Manual proposal</summary>
+              <form id="intel-proposal">
+                <input id="prop-source" placeholder="source: Flint" required>
+                <textarea id="prop-content" rows="3" placeholder="proposal text" required></textarea>
+                <button type="submit">Submit</button>
+              </form>
+            </details>
+          </article>
+        </div>
+      </section>
+
+      <!-- Vitals charts -->
+      <section class="pane hidden" data-pane="vitals">
+        <div class="grid grid-vitals">
+          <article class="card span-2">
+            <header><h2>📈 HP over time</h2><span class="muted" id="vitals-day">today</span></header>
+            <canvas id="chart-hp" width="900" height="220"></canvas>
+          </article>
+          <article class="card">
+            <header><h2>🍞 Food over time</h2></header>
+            <canvas id="chart-food" width="500" height="220"></canvas>
+          </article>
+          <article class="card span-3">
+            <header>
+              <h2>🗺 Move heatmap (today)</h2>
+              <span class="muted">click a dot to focus a bot</span>
+            </header>
+            <canvas id="map-heatmap" width="900" height="500"></canvas>
+          </article>
+        </div>
+      </section>
+
+      <!-- Goal tab -->
+      <section class="pane hidden" data-pane="goal">
+        <article class="card">
+          <header><h2>🎯 Village goal</h2><span class="muted">all bots read this every turn</span></header>
+          <div id="goal-current" class="goal-current"></div>
+          <textarea id="goal-input" rows="3" placeholder="e.g. Build a wheat farm east of the house and store bread in the chest"></textarea>
+          <div id="goal-presets" class="goal-presets"></div>
+          <button id="goal-save" type="button">Set goal</button>
+        </article>
+      </section>
+
+      <!-- Control tab -->
+      <section class="pane hidden" data-pane="control">
+        <div class="grid grid-control">
+          <article class="card">
+            <header>
+              <h2>⏯ All bots</h2>
+              <span class="muted">pause, pace, give items</span>
+            </header>
+            <div class="ctrl-row">
+              <button id="pause-all" type="button">⏸ pause all</button>
+              <button id="resume-all" type="button">▶ resume all</button>
+              <button id="clear-all-queues" type="button">🧹 clear queues</button>
+            </div>
+            <dl class="kv">
+              <div><dt>village goal</dt><dd id="ctrl-goal">—</dd></div>
+              <div><dt>active fleet</dt><dd id="ctrl-active">—</dd></div>
+              <div><dt>model</dt><dd id="ctrl-model">—</dd></div>
+            </dl>
+          </article>
+          <article class="card">
+            <header><h2>🎁 Give items</h2><span class="muted">via RCON</span></header>
+            <form id="give-form">
+              <select id="give-target"></select>
+              <input id="give-item" placeholder="bread / diamond_sword" required>
+              <input id="give-count" type="number" value="1" min="1" max="64">
+              <button type="submit">Give</button>
+            </form>
+            <div id="give-out" class="card-out"></div>
+          </article>
+          <article class="card">
+            <header><h2>🌦 World controls</h2></header>
+            <form id="admin-form">
+              <select id="admin-op">
+                <option value="time">time</option>
+                <option value="weather">weather</option>
+                <option value="difficulty">difficulty</option>
+                <option value="save">save</option>
+              </select>
+              <input id="admin-value" placeholder="day / clear / normal / (empty for save)">
+              <button type="submit">Run</button>
+            </form>
+            <div id="admin-out" class="card-out"></div>
+          </article>
+          <article class="card">
+            <header><h2>🧠 Models</h2><span class="muted">LM Studio</span></header>
+            <select id="model-pick"></select>
+            <select id="model-bot"><option value="all">all bots</option><option>DuckBot</option><option>Steve</option><option>Reed</option><option>Moss</option><option>Flint</option><option>Ember</option></select>
+            <button id="model-set" type="button">Apply</button>
+            <div id="model-out" class="card-out"></div>
+          </article>
+          <article class="card">
+            <header><h2>🛡 Fleet safety</h2><span class="muted">observe-only</span></header>
+            <ol id="safety-list" class="safety"><li class="ph">loading…</li></ol>
+          </article>
+          <article class="card span-2">
+            <header><h2>📡 Inventory grid</h2></header>
+            <div id="inv-grid"><p class="hint">loading…</p></div>
+          </article>
+        </div>
+      </section>
+
+      <!-- Modes tab (formerly captain's log) -->
+      <section class="pane hidden" data-pane="modes">
+        <div class="grid grid-control">
+          <article class="card span-2">
+            <header>
+              <h2>🧭 HermesCraft modes</h2>
+              <a class="muted" href="https://github.com/bigph00t/hermescraft" target="_blank" rel="noreferrer">↗ upstream</a>
+            </header>
+            <div id="mode-cards"><p class="hint">loading…</p></div>
+          </article>
+          <article class="card span-2">
+            <header><h2>✨ Capabilities</h2></header>
+            <div id="mode-capabilities" class="capability-grid"><p class="hint">loading…</p></div>
+          </article>
+          <article class="card">
+            <header><h2>🛠 Commands</h2></header>
+            <div id="mode-commands" class="command-groups"><p class="hint">loading…</p></div>
+          </article>
+          <article class="card">
+            <header><h2>✅ Runtime readiness</h2></header>
+            <div id="mode-readiness"><p class="hint">checking…</p></div>
+          </article>
+          <article class="card span-2">
+            <header><h2>🧩 Fleet mapping</h2></header>
+            <div id="mode-fleet" class="fleet-map"><p class="hint">loading…</p></div>
+          </article>
+        </div>
+      </section>
+
+      <!-- Ask tab — alias for intel pane's advisor -->
+    </main>
+
+    <!-- Right pane: bot details / care -->
+    <aside class="care" id="care" aria-label="Bot care">
+      <div class="rail-head">SELECTED</div>
+      <div id="care-name" class="care-empty">click an avatar</div>
+      <div id="care-btns"></div>
+      <div id="care-out" class="card-out"></div>
+
+      <div class="rail-head sep">QUEUE</div>
+      <div id="queue-list" class="queue"></div>
+      <div class="queue-add">
         <select id="queue-action"></select>
         <input id="queue-args" placeholder="args: 50 63 85">
         <button id="queue-btn" type="button">+ Queue</button>
       </div>
+
+      <div class="rail-head sep">CHAIN OF COMMAND</div>
+      <ol class="coc">
+        <li><b>Player (Duckets)</b></li>
+        <li>DuckBot <i>overseer</i> <code>:3001</code></li>
+        <li>Steve <i>foreman</i> <code>:3011</code></li>
+        <li>Reed / Ember <i>builders</i></li>
+        <li>Moss / Flint <i>out-of-camp</i></li>
+      </ol>
+    </aside>
+  </div>
+
+  <!-- Toasts -->
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Inventory modal -->
+  <div id="inv-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="inv-title" tabindex="-1">
+    <div class="modal-box" id="inv-box">
+      <h3 id="inv-title">🎒</h3>
+      <div id="inv-list"></div>
+      <button id="inv-close" type="button">Close</button>
     </div>
-  </aside>
+  </div>
+
+  <!-- Settings modal -->
+  <div id="settings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1">
+    <div class="modal-box">
+      <h3 id="settings-title">⚙ Settings</h3>
+      <label class="kv"><span>Refresh interval</span>
+        <select id="setting-refresh">
+          <option value="1500">1.5s (live)</option>
+          <option value="3000" selected>3s</option>
+          <option value="5000">5s</option>
+          <option value="10000">10s</option>
+        </select>
+      </label>
+      <label class="kv"><span>Theme</span>
+        <select id="setting-theme">
+          <option value="dark" selected>dark (linear-inspired)</option>
+        </select>
+      </label>
+      <label class="kv"><span>Chat focus in</span>
+        <input id="setting-chat-target" placeholder="(no filter)">
+      </label>
+      <label class="kv"><span>Keyboard shortcuts</span>
+        <div class="kbdrow">
+          <kbd>1</kbd>…<kbd>7</kbd> tabs
+          <kbd>/</kbd> focus chat
+          <kbd>g</kbd> jump goal
+          <kbd>a</kbd> ask
+          <kbd>m</kbd> map
+        </div>
+      </label>
+      <button id="settings-close" type="button">Done</button>
+    </div>
+  </div>
 </div>
-<div id="toast" role="status" aria-live="polite"></div>
-<div id="inv-modal" role="dialog" aria-modal="true" aria-labelledby="inv-title"><div id="inv-box"><h3 id="inv-title">🎒</h3><div id="inv-list"></div><button id="inv-close" type="button" aria-label="Close inventory">Close</button></div></div>
-<script src="/app.js?v=8"></script>
+
+<script src="/app.js?v=10" type="module"></script>
 </body>
 </html>

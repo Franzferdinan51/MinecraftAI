@@ -59,6 +59,43 @@ function json(res, code, obj) {
   res.writeHead(code, { 'content-type': 'application/json' });
   res.end(JSON.stringify(obj));
 }
+
+// History snapshotter data — the rolling jsonl goes under ~/.hermes/webui-history/
+const HISTORY_DIR = process.env.WEBUI_HISTORY_DIR
+  || path.join(process.env.HOME || '', '.hermes', 'webui-history');
+let historyWriteOk = false;
+try {
+  fs.mkdirSync(HISTORY_DIR, { recursive: true });
+  historyWriteOk = true;
+} catch { historyWriteOk = false; }
+function historyFileFor(name) {
+  const day = new Date().toISOString().slice(0, 10);
+  return path.join(HISTORY_DIR, `${name}-${day}.jsonl`);
+}
+// Memory of last seen deaths per bot so the activity feed can show NEW deaths
+const lastSeenDeaths = {};
+const seenDeathKeys = new Set();
+function snapshotFor(label, payload, max = 200000) {
+  if (!historyWriteOk) return;
+  try {
+    const line = JSON.stringify({ t: Date.now(), label, payload }) + '\n';
+    if (line.length > max) return;
+    fs.appendFileSync(historyFileFor(label), line);
+  } catch { /* best-effort: ignore */ }
+}
+function pruneHistory() {
+  if (!historyWriteOk) return;
+  try {
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    for (const f of fs.readdirSync(HISTORY_DIR)) {
+      const p = path.join(HISTORY_DIR, f);
+      const stat = fs.statSync(p);
+      if (stat.mtimeMs < sevenDaysAgo) fs.unlinkSync(p);
+    }
+  } catch { /* ignore */ }
+}
+pruneHistory();
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let raw = '';
@@ -575,6 +612,154 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // ── leaderboard: per-bot cumulative stats from history ───────────────
+  if (req.method === 'GET' && url.pathname === '/api/leaderboard') {
+    if (!historyWriteOk) return json(res, 503, { ok: false, error: 'history disabled' });
+    const today = new Date().toISOString().slice(0, 10);
+    const file = historyFileFor('fleet');
+    const counts = Object.fromEntries(BOTS.map((b) => [b.name, { deaths: 0, lowHP: 0, nearDeaths: 0, voxels: 0, lastHP: null }]));
+    try {
+      const text = fs.readFileSync(file, 'utf8');
+      let prevHP = {};
+      for (const line of text.split('\n')) {
+        if (!line) continue;
+        let rec; try { rec = JSON.parse(line); } catch { continue; }
+        if (rec.label !== 'fleet' || !rec.payload) continue;
+        for (const b of (rec.payload.bots || [])) {
+          if (!counts[b.name]) continue;
+          const hp = Number(b.health || 0);
+          const prev = prevHP[b.name];
+          // Death = HP went from positive to 0/very low (precise detection)
+          if (prev != null && prev > 5 && hp <= 0) counts[b.name].deaths += 1;
+          if (hp > 0 && hp < 4) counts[b.name].lowHP += 1;
+          if (b.pos) counts[b.name].voxels += 1;
+          prevHP[b.name] = hp;
+        }
+      }
+    } catch { /* empty */ }
+    const sorted = Object.entries(counts)
+      .map(([name, c]) => ({ name, deaths: c.deaths, lowHP: c.lowHP, active: c.voxels }))
+      .sort((a, b) => b.deaths - a.deaths || b.active - a.active);
+    return json(res, 200, { ok: true, day: today, leaders: sorted });
+  }
+
+  // ── vitals-history: read daily JSONL snapshot for charts ───────────────
+  if (req.method === 'GET' && url.pathname === '/api/vitals-history') {
+    if (!historyWriteOk) return json(res, 503, { ok: false, error: 'history disabled' });
+    const day = url.searchParams.get('day') || new Date().toISOString().slice(0, 10);
+    const file = historyFileFor('fleet');
+    const series = [];
+    try {
+      const text = fs.readFileSync(file, 'utf8');
+      for (const line of text.split('\n')) {
+        if (!line) continue;
+        let rec; try { rec = JSON.parse(line); } catch { continue; }
+        if (rec.label !== 'fleet' || !rec.payload) continue;
+        series.push({ t: rec.t, bots: rec.payload.bots });
+      }
+    } catch { /* empty */ }
+    return json(res, 200, { ok: true, day, count: series.length, series });
+  }
+
+  // ── vitals-latest: just the very last snapshot from history ───────────
+  if (req.method === 'GET' && url.pathname === '/api/vitals-latest') {
+    if (!historyWriteOk) return json(res, 503, { ok: false, error: 'history disabled' });
+    const file = historyFileFor('fleet');
+    let last = null;
+    try {
+      const text = fs.readFileSync(file, 'utf8');
+      for (const line of text.split('\n').filter(Boolean).slice(-200)) {
+        try {
+          const rec = JSON.parse(line);
+          if (rec.label === 'fleet') last = rec;
+        } catch { /* skip */ }
+      }
+    } catch { /* empty */ }
+    return json(res, 200, { ok: true, snapshot: last });
+  }
+
+  // ── world: lightweight overview w/o every bot fetch ──────────────────
+  if (req.method === 'GET' && url.pathname === '/api/world') {
+    try {
+      const list = await rconSend('list');
+      const time = await rconSend('time query daytime');
+      const diff = await rconSend('difficulty');
+      const tick = Number(time.match(/(\d+)/)?.[1] ?? NaN);
+      const phase = Number.isNaN(tick) ? 'unknown'
+        : tick < 12000 ? 'day'
+        : tick < 13000 ? 'sunset'
+        : tick < 23000 ? 'night'
+        : 'sunrise';
+      const players = (list.match(/online:\s*(.*)$/)?.[1] || '')
+        .split(/,\s*/).map((s) => s.trim()).filter(Boolean);
+      return json(res, 200, {
+        ok: true,
+        players,
+        tick: Number.isNaN(tick) ? null : tick,
+        phase,
+        difficulty: (diff.match(/difficulty is (\w+)/i)?.[1] || diff).slice(0, 60),
+      });
+    } catch (e) {
+      return json(res, 502, { ok: false, error: 'rcon: ' + String(e.message || e).slice(0, 100) });
+    }
+  }
+
+  // ── fleet-cards: compact per-bot summary for the new dashboard ───────
+  if (req.method === 'GET' && url.pathname === '/api/fleet-cards') {
+    const bots = await Promise.all(BOTS.map(async (b) => {
+      const [st, task, deaths] = await Promise.all([
+        botFetch(b.port, '/status'),
+        botFetch(b.port, '/task'),
+        botFetch(b.port, '/deaths'),
+      ]);
+      const d = st.data || {};
+      return {
+        name: b.name,
+        role: b.role,
+        color: b.color,
+        port: b.port,
+        online: st.ok,
+        health: d.health ?? null,
+        food: d.food ?? null,
+        pos: d.position ? [Math.floor(d.position.x), Math.floor(d.position.y), Math.floor(d.position.z)] : null,
+        holding: d.holding?.name || 'empty',
+        holding_count: d.holding?.count ?? null,
+        isDay: d.isDay ?? null,
+        time: d.time ?? null,
+        task: task.data?.task || null,
+        deaths: deaths.data?.total ?? null,
+        last_death: deaths.data?.last_death || null,
+      };
+    }));
+    return json(res, 200, { ok: true, bots });
+  }
+
+  // ── chat-stream: server-sent events of new chat lines ─────────────────
+  if (req.method === 'GET' && url.pathname === '/api/chat-stream') {
+    res.writeHead(200, {
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-cache, no-transform',
+      'connection': 'keep-alive',
+      'x-accel-buffering': 'no',
+    });
+    const seen = new Set();
+    const ping = setInterval(() => res.write(`: ping\n\n`), 15000);
+    const tick = setInterval(async () => {
+      try {
+        const r = await botFetch(3001, '/chat?count=20');
+        const msgs = r.data?.messages || [];
+        for (const m of msgs) {
+          const key = `${m.time}|${m.from}|${m.message}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          res.write(`data: ${JSON.stringify(m)}\n\n`);
+        }
+      } catch { /* keep stream alive */ }
+    }, 2500);
+    req.on('close', () => { clearInterval(ping); clearInterval(tick); });
+    return; // keep the connection open
+  }
+
   if (req.method === 'GET' && (req.url === '/' || req.url.startsWith('/api/'))) {
     if (req.url === '/') return serveStatic(req, res);
     return json(res, 404, { ok: false, error: 'nope' });
@@ -584,4 +769,33 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`HermesCraft Mission Control: http://127.0.0.1:${PORT}/`);
+
+  // Periodic fleet snapshotter — history ring for the charts.
+  const SNAPSHOT_EVERY_MS = Math.max(15_000, Number(process.env.WEBUI_SNAPSHOT_MS || 300_000));
+  let lastSnap = '';
+  async function snapshot() {
+    try {
+      const st = await new Promise((resolve, reject) => {
+        const req = http.get(`http://127.0.0.1:${PORT}/api/fleet-cards`, (res) => {
+          let buf = '';
+          res.on('data', (c) => { buf += c; });
+          res.on('end', () => { try { resolve(JSON.parse(buf)); } catch (e) { reject(e); } });
+        });
+        req.on('error', reject);
+        req.setTimeout(8000, () => req.destroy(new Error('timeout')));
+      });
+      const compact = JSON.stringify({ t: Date.now(), label: 'fleet', payload: st });
+      // Append de-duplicated; only write if the compact payload differs
+      if (compact !== lastSnap) {
+        snapshotFor('fleet', st);
+        lastSnap = compact;
+      }
+    } catch { /* ignore */ }
+  }
+  // First snapshot on boot, then on the interval
+  setTimeout(snapshot, 5_000);
+  const id = setInterval(snapshot, SNAPSHOT_EVERY_MS);
+  id.unref?.();
+  // Clean expired files daily
+  setInterval(pruneHistory, 6 * 60 * 60 * 1000).unref?.();
 });
